@@ -1,0 +1,3 @@
+[submodule "noita-data"]
+	path = noita-data
+	url = https://github.com/oshinop/noita-data.git

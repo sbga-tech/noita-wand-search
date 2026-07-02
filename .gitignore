@@ -1,0 +1,5 @@
+/build
+**/backup
+/target
+.DS_Store
+*.log

@@ -1,0 +1,23 @@
+[package]
+name = "noita_sim"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+num_enum = "0.7"
+rayon = "1.10"
+
+[build-dependencies]
+csv = "1"
+proc-macro2 = "1"
+quote = "1"
+serde.workspace = true
+serde_luaq = "0.2.1"
+roxmltree = "0.20"
+syn = { version = "2", default-features = false, features = ["parsing"] }
+prettyplease = "0.2"
+
+[dev-dependencies]
+serde_json.workspace = true

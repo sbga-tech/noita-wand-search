@@ -1,0 +1,495 @@
+@import "tailwindcss";
+@source "../src";
+
+@theme {
+  --color-cave: #0a0806;
+  --color-night: #15100a;
+  --color-panel: #1a140c;
+  --color-bronze: #6f5526;
+  --color-bronze-bright: #9c7836;
+  --color-gold: #f5b73b;
+  --color-gold-bright: #ffce5c;
+  --color-parchment: #e8d6a8;
+  --color-parchment-dim: #ab9468;
+  --color-ember: #d8731f;
+  --color-ember-bright: #f59433;
+  --color-blood: #c2371d;
+  --color-spell: #5bb0e0;
+
+  --font-display: "Noita Pixel", ui-monospace, "Courier New", monospace;
+  --font-body: "Noita Pixel", ui-monospace, "Courier New", monospace;
+}
+
+@font-face {
+  font-family: "Noita Pixel";
+  src: url("/public/NoitaPixel.ttf") format("truetype");
+  font-weight: 400 700;
+  font-display: swap;
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    border-radius: 0 !important;
+    box-sizing: border-box;
+  }
+  html {
+    color-scheme: dark;
+  }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--color-cave) url("/public/orbroom.png") center / cover fixed;
+    color: var(--color-parchment);
+    font-family: var(--font-body);
+    font-size: 17px;
+    line-height: 1.45;
+  }
+  h1,
+  h2,
+  legend {
+    font-family: var(--font-display);
+    font-weight: 400;
+  }
+  a {
+    color: var(--color-gold);
+    text-decoration: none;
+  }
+  a:hover {
+    color: var(--color-gold-bright);
+    text-decoration: underline;
+  }
+  ::selection {
+    background: var(--color-ember);
+    color: #120a04;
+  }
+}
+
+@layer components {
+  /* ---- shell + hero --------------------------------------------------- */
+  .background-dim {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(rgba(8, 5, 3, 0.62), rgba(5, 3, 2, 0.86));
+  }
+  .atlas-shell {
+    position: relative;
+    width: min(1480px, calc(100% - 28px));
+    margin: 0 auto;
+    padding: 28px 0 44px;
+  }
+  .hero {
+    @apply mb-6 flex items-center gap-4;
+  }
+  .hero img {
+    @apply h-14 w-14;
+  }
+  .kicker {
+    @apply m-0 text-[0.62rem] uppercase tracking-[0.34em] text-gold;
+    font-family: var(--font-display);
+  }
+  .atlas-title {
+    @apply m-0 uppercase leading-none text-gold-bright;
+    font-family: var(--font-display);
+    font-size: clamp(1.6rem, 3.6vw, 3rem);
+    letter-spacing: 0.04em;
+    text-shadow: 3px 3px 0 #000;
+  }
+  .hero p {
+    @apply mt-2 max-w-[70ch] text-sm text-parchment-dim;
+  }
+
+  /* ---- layout --------------------------------------------------------- */
+  .atlas-grid {
+    @apply grid items-start gap-4;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .left-column {
+    @apply grid min-w-0 gap-4;
+  }
+  .right-column {
+    @apply grid gap-4;
+    position: sticky;
+    top: 18px;
+  }
+
+  /* ---- panels --------------------------------------------------------- */
+  .panel {
+    @apply border-2 border-bronze bg-panel p-4;
+    box-shadow:
+      4px 4px 0 0 rgba(0, 0, 0, 0.55),
+      inset 0 0 0 1px rgba(0, 0, 0, 0.4);
+  }
+  .panel-head {
+    @apply mb-3 flex items-baseline justify-between gap-3;
+  }
+  .panel-title {
+    @apply m-0 text-sm uppercase tracking-widest text-gold;
+    font-family: var(--font-display);
+  }
+  .description p {
+    @apply m-0 text-sm text-parchment-dim;
+  }
+
+  /* ---- form fields ---------------------------------------------------- */
+  .atlas-form {
+    @apply grid gap-4;
+  }
+  .field-set {
+    @apply border-2 border-bronze p-3;
+    background: rgba(10, 8, 6, 0.4);
+  }
+  .field-set > legend {
+    @apply px-2 text-xs uppercase tracking-widest text-gold;
+    font-family: var(--font-display);
+  }
+  .field {
+    @apply grid min-w-0 gap-1;
+  }
+  .field-label {
+    @apply text-[0.66rem] uppercase tracking-wider text-parchment-dim;
+  }
+  .atlas-input {
+    @apply h-10 w-full border-2 border-bronze bg-cave px-2 text-parchment;
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+  }
+  .atlas-input:focus {
+    @apply border-gold outline-none;
+    box-shadow: inset 0 0 0 1px var(--color-gold);
+  }
+
+  /* ---- buttons -------------------------------------------------------- */
+  .btn {
+    @apply inline-flex h-10 cursor-pointer items-center justify-center border-2 px-4 uppercase tracking-wider;
+    font-family: var(--font-display);
+    font-size: 0.72rem;
+    transition: transform 0.04s ease;
+  }
+  .btn:active {
+    transform: translate(2px, 2px);
+  }
+  .btn:disabled {
+    @apply cursor-not-allowed opacity-40;
+    transform: none;
+  }
+  .btn-primary {
+    @apply border-ember-bright bg-ember text-[#160c03];
+    box-shadow: 3px 3px 0 0 #5e2f0c;
+  }
+  .btn-primary:hover {
+    @apply bg-ember-bright;
+  }
+  .btn-primary:active {
+    box-shadow: 1px 1px 0 0 #5e2f0c;
+  }
+  .btn-ghost {
+    @apply border-bronze bg-transparent text-gold;
+  }
+  .btn-ghost:hover:not(:disabled) {
+    @apply border-gold;
+    background: rgba(245, 183, 59, 0.12);
+  }
+  .btn-danger {
+    @apply border-blood text-[#ffc9bd];
+    background: rgba(194, 55, 29, 0.3);
+  }
+  .btn-danger:hover {
+    background: rgba(194, 55, 29, 0.55);
+  }
+
+  /* ---- origin + predicate grids -------------------------------------- */
+  .origin-grid {
+    @apply mb-3 grid grid-cols-3 items-end gap-3;
+  }
+  .coords-grid {
+    @apply grid items-end gap-3;
+    grid-template-columns: 1fr 1fr auto;
+  }
+  .predicate-list {
+    @apply mb-3 grid gap-2;
+  }
+  .predicate-empty {
+    @apply m-0 border-2 border-dashed border-bronze p-3 italic text-parchment-dim;
+  }
+  .predicate-row {
+    @apply grid items-end gap-2 border-2 border-bronze p-2;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 0.8fr) 2.5rem;
+    background: rgba(10, 8, 6, 0.6);
+  }
+  .predicate-row .field-label {
+    @apply text-[0.6rem];
+  }
+  .add-predicate {
+    @apply w-full border-dashed;
+  }
+  .remove-predicate {
+    @apply w-10 px-0 text-lg;
+  }
+  .action-row {
+    @apply grid items-stretch gap-3;
+    grid-template-columns: 1fr auto;
+  }
+  #true_knowledge_button {
+    @apply w-full;
+  }
+
+  /* ---- unlock flags ------------------------------------------------------ */
+  .unlock-menu {
+    @apply grid gap-3;
+  }
+  .unlock-menu > summary {
+    @apply flex cursor-pointer list-none items-center justify-between gap-3;
+  }
+  .unlock-menu > summary::-webkit-details-marker {
+    display: none;
+  }
+  .unlock-menu > summary small {
+    @apply mt-1 block text-[0.64rem] uppercase tracking-wider text-parchment-dim;
+  }
+  .unlock-menu > summary b {
+    @apply border-2 border-bronze bg-cave px-2 py-1 text-xs tabular-nums text-gold-bright;
+    font-weight: 400;
+  }
+  .unlock-body {
+    @apply mt-3 grid gap-3;
+  }
+  .unlock-dropzone {
+    @apply grid gap-2 border-2 border-dashed border-bronze bg-cave p-3 text-center;
+  }
+  .unlock-dropzone.dragging {
+    @apply border-gold;
+    background: rgba(245, 183, 59, 0.14);
+  }
+  .unlock-dropzone p {
+    @apply m-0 uppercase tracking-wider text-gold-bright;
+    font-family: var(--font-display);
+    font-size: 0.78rem;
+  }
+  .unlock-dropzone span,
+  .unlock-status {
+    @apply m-0 text-xs text-parchment-dim;
+  }
+  .unlock-actions {
+    @apply grid grid-cols-2 gap-2;
+  }
+  .unlock-flag-list {
+    @apply grid max-h-[28rem] gap-2 overflow-auto pr-1;
+  }
+  .unlock-flag-row {
+    @apply grid cursor-pointer items-start gap-2 border-2 border-bronze bg-night p-2;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .unlock-flag-row:has(input:checked) {
+    border-color: var(--color-gold);
+    background: rgba(245, 183, 59, 0.1);
+  }
+  .unlock-flag-row input {
+    @apply mt-1 h-4 w-4 accent-gold;
+  }
+  .unlock-flag-copy {
+    @apply grid min-w-0 gap-1;
+  }
+  .unlock-flag-copy b {
+    @apply break-all text-xs text-gold;
+    font-weight: 400;
+  }
+  .unlock-flag-copy small {
+    @apply text-xs leading-snug text-parchment-dim;
+  }
+
+  /* ---- results -------------------------------------------------------- */
+  .results #status {
+    @apply text-sm tabular-nums text-gold;
+    min-height: 1.4em;
+  }
+  #output {
+    min-height: 88px;
+  }
+  .empty-result {
+    @apply border-2 border-dashed border-bronze p-4 text-center text-parchment-dim;
+  }
+  .error {
+    @apply border-2 border-blood p-4 text-center text-[#ffb3a6];
+    background: rgba(194, 55, 29, 0.15);
+  }
+  .hit-title {
+    @apply mb-1 text-xl uppercase tracking-widest text-gold-bright;
+    font-family: var(--font-display);
+  }
+  .coords {
+    @apply mb-3 tabular-nums text-parchment;
+  }
+  .wand-card {
+    display: grid;
+    width: fit-content;
+    max-width: 100%;
+    column-gap: 1.25rem;
+    align-items: center;
+    justify-items: start;
+    padding: 1.1rem 1.25rem;
+    border: 3px solid #928167;
+    border-radius: 0 7.5px 0 7.5px;
+    background: rgba(5, 5, 5, 0.8);
+    font-family: var(--font-body);
+    font-size: 1.05rem;
+    line-height: 1.25;
+    color: #eeeaea;
+  }
+  .wand-name {
+    grid-area: name;
+    @apply m-0 mb-2 uppercase text-gold-bright;
+    letter-spacing: 0.02em;
+  }
+  .wand-sprite {
+    grid-area: image;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 7rem;
+    height: 100%;
+    overflow: visible;
+  }
+  .wand-sprite img {
+    flex: none;
+    width: 220px;
+    height: auto;
+    max-width: unset;
+    transform: rotate(-90deg);
+    image-rendering: pixelated;
+  }
+  .stat-label {
+    grid-column: label;
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+    color: var(--color-parchment);
+  }
+  .stat-label img {
+    width: 16px;
+    height: 16px;
+    margin-right: 0.5rem;
+    image-rendering: pixelated;
+  }
+  .stat-value {
+    grid-column: value;
+    @apply tabular-nums;
+    white-space: nowrap;
+    color: #fff0c7;
+  }
+  .always-cast-label {
+    margin-top: 0.6rem;
+  }
+  .always-cast-spells {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    margin-top: 0.6rem;
+  }
+  .always-cast-spells img {
+    width: 32px;
+    height: 32px;
+    image-rendering: pixelated;
+  }
+  .spell-container {
+    grid-area: spells;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin-top: 1rem;
+  }
+  .wand-card-spell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    border: 3px dashed #794738;
+    border-radius: 5px;
+    background: rgb(54, 43, 38);
+  }
+  .wand-card-spell img {
+    width: 36px;
+    height: 36px;
+    image-rendering: pixelated;
+  }
+
+  /* ---- map ------------------------------------------------------------ */
+  .map-panel {
+    @apply overflow-hidden border-2 border-bronze;
+    box-shadow: 4px 4px 0 0 rgba(0, 0, 0, 0.55);
+  }
+  .map-frame {
+    @apply relative w-full overflow-hidden bg-cave;
+  }
+  .map-frame img,
+  .map-frame svg {
+    @apply absolute inset-0 h-full w-full;
+  }
+  .map-frame img {
+    object-fit: fill;
+    image-rendering: pixelated;
+  }
+  #map_overlay {
+    pointer-events: none;
+  }
+  .marker line {
+    stroke: var(--color-gold-bright);
+    stroke-width: 4;
+    stroke-linecap: square;
+    vector-effect: non-scaling-stroke;
+  }
+  .marker circle {
+    fill: rgba(245, 183, 59, 0.22);
+    stroke: var(--color-gold-bright);
+    stroke-width: 2;
+    vector-effect: non-scaling-stroke;
+  }
+  .map-progress {
+    @apply absolute bottom-2 right-2 grid justify-items-end gap-0.5 border-2 border-bronze px-3 py-2 text-xs tabular-nums text-gold-bright;
+    background: rgba(10, 8, 6, 0.9);
+  }
+  .map-progress small {
+    @apply text-parchment-dim;
+  }
+
+  footer {
+    @apply mt-6 flex justify-center gap-6 text-sm;
+  }
+}
+
+@media (max-width: 1080px) {
+  .atlas-grid {
+    grid-template-columns: 1fr;
+  }
+  .right-column {
+    position: static;
+  }
+  .map-frame {
+    max-width: 640px;
+    margin-inline: auto;
+  }
+}
+@media (max-width: 640px) {
+  .origin-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .coords-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .reset-origin {
+    grid-column: 1 / -1;
+  }
+  .predicate-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .predicate-row .remove-predicate {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+  .action-row {
+    grid-template-columns: 1fr;
+  }
+}

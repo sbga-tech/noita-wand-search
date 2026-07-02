@@ -1,0 +1,3 @@
+src/data/generated/*
+!src/data/generated/mod.rs
+
