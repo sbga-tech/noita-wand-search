@@ -72,8 +72,8 @@ pub fn MapPanel(
     view! {
         <section class="map-panel">
             <div class="map-frame" style=frame_ratio>
-                <img id="newgame_map" src="/public/biome_map.png" alt="NG Map" style=move || { if ng.get() == 0 { "display:block" } else { "display:none" } } />
-                <img id="newgame_plus_map" src="/public/biome_map_newgame_plus.png" alt="NG+ Map" style=move || { if ng.get() > 0 { "display:block" } else { "display:none" } } />
+                <img id="newgame_map" src="public/biome_map.png" alt="NG Map" style=move || { if ng.get() == 0 { "display:block" } else { "display:none" } } />
+                <img id="newgame_plus_map" src="public/biome_map_newgame_plus.png" alt="NG+ Map" style=move || { if ng.get() > 0 { "display:block" } else { "display:none" } } />
                 <svg id="map_overlay" viewBox=view_box preserveAspectRatio="none" role="img" aria-label="Search map overlay">
                     <g class="marker" transform=marker_transform><line x1="-10" y1="0" x2="10" y2="0"/><line x1="0" y1="-10" x2="0" y2="10"/><circle cx="0" cy="0" r="7"/></g>
                 </svg>

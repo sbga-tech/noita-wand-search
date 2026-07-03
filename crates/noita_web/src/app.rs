@@ -1,27 +1,12 @@
 use crate::components::control_panel::{validate_state, ControlPanel, FormState};
 use crate::components::map_panel::MapPanel;
 use crate::components::results_panel::ResultsPanel;
-use crate::components::search_runner::spawn_client_search;
+use crate::components::search_runner::{cancel_active_search_worker, spawn_client_search};
 use leptos::prelude::*;
-use leptos_router::{
-    components::{Route, Router, Routes},
-    StaticSegment,
-};
 use noita_sim::search::{SearchMode, SearchProgress};
 
 #[component]
 pub fn App() -> impl IntoView {
-    view! {
-        <Router>
-            <Routes fallback=|| "Page not found.".into_view()>
-                <Route path=StaticSegment("") view=AtlasPage />
-            </Routes>
-        </Router>
-    }
-}
-
-#[component]
-fn AtlasPage() -> impl IntoView {
     let status = RwSignal::new("Ready.".to_string());
     let error = RwSignal::new(String::new());
     let result = RwSignal::new(None);
@@ -73,6 +58,7 @@ fn AtlasPage() -> impl IntoView {
 
     let on_cancel = Callback::new(move |()| {
         active_token.update(|token| *token = token.wrapping_add(1));
+        cancel_active_search_worker();
         searching.set(false);
         status.set("Cancelled.".to_string());
     });
@@ -81,7 +67,7 @@ fn AtlasPage() -> impl IntoView {
         <div class="background-dim"></div>
         <main class="atlas-shell">
             <header class="mb-6 flex items-center">
-                <img class="h-16 w-auto [image-rendering:pixelated]" src="/public/site-icon.png" alt="" />
+                <img class="h-16 w-auto [image-rendering:pixelated]" src="public/site-icon.png" alt="" />
                 <div>
                     <p class="m-0 mt-2 max-w-[70ch] font-display text-sm uppercase tracking-[0.34em] text-parchment-dim">"Arcane cartographer's atlas"</p>
                     <h1 class="atlas-title">"Noita Wand Search"</h1>

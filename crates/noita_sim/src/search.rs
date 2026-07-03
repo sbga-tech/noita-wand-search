@@ -48,9 +48,10 @@ pub struct SearchState {
     mode: SearchMode,
     wand_filters: WandFilterSet,
     loot_spawner: LootSpawner,
+    candidates: Vec<SpiralCandidate>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub enum SearchHit {
     Wand {
         x: f64,
@@ -132,6 +133,7 @@ impl SearchState {
             last_y: start_y,
             mode,
             wand_filters,
+            candidates: Vec::new(),
         }
     }
 
@@ -157,7 +159,9 @@ impl SearchState {
     }
 
     fn step_parallel(&mut self, max_iterations: u32) -> Option<SearchHit> {
-        let mut candidates = Vec::with_capacity(max_iterations as usize);
+        let mut candidates = std::mem::take(&mut self.candidates);
+        candidates.clear();
+        candidates.reserve(max_iterations as usize);
         for _ in 0..max_iterations {
             candidates.push(self.next_candidate());
             self.advance_spiral();
@@ -169,8 +173,10 @@ impl SearchState {
         });
         if let Some((candidate, hit)) = hit {
             self.restore_candidate(candidate);
+            self.candidates = candidates;
             return Some(hit);
         }
+        self.candidates = candidates;
         None
     }
 

@@ -1,24 +1,42 @@
-use gloo_timers::future::TimeoutFuture;
+use crate::search_worker_protocol::{SearchWorkerEvent, SearchWorkerStart};
+use js_sys::Uint8Array;
 use leptos::prelude::{GetUntracked, ReadSignal, Set, WriteSignal};
-use leptos::task::spawn_local;
-use noita_sim::search::{SearchHit, SearchMode, SearchProgress, SearchRequest, SearchState};
+use noita_sim::search::{SearchHit, SearchProgress, SearchRequest};
+use std::cell::RefCell;
+use wasm_bindgen::prelude::*;
+use wasm_bindgen::JsCast;
+use web_sys::{ErrorEvent, MessageEvent, Worker, WorkerOptions, WorkerType};
 
-pub fn batch_size(mode: SearchMode) -> u32 {
-    if mode == SearchMode::EoeWand {
-        38_373
-    } else {
-        19_287
+struct ActiveSearchWorker {
+    worker: Worker,
+    _on_message: Closure<dyn FnMut(MessageEvent)>,
+    _on_error: Closure<dyn FnMut(ErrorEvent)>,
+}
+
+impl Drop for ActiveSearchWorker {
+    fn drop(&mut self) {
+        self.worker.terminate();
     }
 }
 
-pub fn run_search_until_hit(request: SearchRequest, max_batches: u32) -> (u32, Option<SearchHit>) {
-    let mut state = SearchState::new(request.clone());
-    for batch in 0..max_batches {
-        if let Some(hit) = state.step(batch_size(request.mode)) {
-            return (batch, Some(hit));
-        }
+thread_local! {
+    static ACTIVE_SEARCH_WORKER: RefCell<Option<ActiveSearchWorker>> = const { RefCell::new(None) };
+}
+
+fn format_search_status(searched_pixels: u32, pixels_per_second: f64) -> String {
+    format!("{searched_pixels} pixels checked · {pixels_per_second:.2} px/s")
+}
+
+pub fn cancel_active_search_worker() {
+    ACTIVE_SEARCH_WORKER.with(|active| {
+        active.borrow_mut().take();
+    });
+}
+
+fn clear_active_search_worker(token_id: u64, active_token: ReadSignal<u64>) {
+    if active_token.get_untracked() == token_id {
+        cancel_active_search_worker();
     }
-    (max_batches, None)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -31,27 +49,108 @@ pub fn spawn_client_search(
     progress: WriteSignal<SearchProgress>,
     searching: WriteSignal<bool>,
 ) {
-    spawn_local(async move {
-        let mut state = SearchState::new(request.clone());
-        result.set(None);
-        status.set("Searching...".to_string());
-        loop {
+    cancel_active_search_worker();
+
+    let start_message = match bincode::serialize(&SearchWorkerStart { token_id, request }) {
+        Ok(message) => message,
+        Err(error) => {
+            status.set(format!("Failed to encode search request: {error}"));
+            searching.set(false);
+            return;
+        }
+    };
+
+    let options = WorkerOptions::new();
+    options.set_type(WorkerType::Module);
+    let worker = match Worker::new_with_options("search_worker_loader.js", &options) {
+        Ok(worker) => worker,
+        Err(error) => {
+            status.set(format!("Failed to start search worker: {error:?}"));
+            searching.set(false);
+            return;
+        }
+    };
+
+    let worker_for_message = worker.clone();
+    let on_message =
+        Closure::<dyn FnMut(MessageEvent)>::wrap(Box::new(move |event: MessageEvent| {
             if active_token.get_untracked() != token_id {
                 return;
             }
-            if let Some(hit) = state.step(batch_size(request.mode)) {
-                let current = state.progress();
-                status.set(format!("{} pixels checked...", current.searched_pixels));
-                progress.set(current);
-                result.set(Some(hit));
-                searching.set(false);
-                return;
+
+            let message = Uint8Array::new(&event.data()).to_vec();
+
+            match bincode::deserialize::<SearchWorkerEvent>(&message) {
+                Ok(SearchWorkerEvent::Ready) => {
+                    let message = Uint8Array::from(start_message.as_slice());
+                    if let Err(error) = worker_for_message.post_message(&message) {
+                        status.set(format!(
+                            "Failed to post search request to worker: {error:?}"
+                        ));
+                        searching.set(false);
+                        clear_active_search_worker(token_id, active_token);
+                    }
+                }
+                Ok(SearchWorkerEvent::Progress {
+                    token_id: event_token,
+                    progress: current,
+                    pixels_per_second,
+                }) if event_token == token_id => {
+                    status.set(format_search_status(
+                        current.searched_pixels,
+                        pixels_per_second,
+                    ));
+                    progress.set(current);
+                }
+                Ok(SearchWorkerEvent::Hit {
+                    token_id: event_token,
+                    progress: current,
+                    pixels_per_second,
+                    hit,
+                }) if event_token == token_id => {
+                    status.set(format_search_status(
+                        current.searched_pixels,
+                        pixels_per_second,
+                    ));
+                    progress.set(current);
+                    result.set(Some(hit));
+                    searching.set(false);
+                    clear_active_search_worker(token_id, active_token);
+                }
+                Ok(SearchWorkerEvent::Error {
+                    token_id: event_token,
+                    message,
+                }) if event_token.is_none() || event_token == Some(token_id) => {
+                    status.set(format!("Search worker error: {message}"));
+                    searching.set(false);
+                    clear_active_search_worker(token_id, active_token);
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    status.set(format!("Failed to decode search worker message: {error}"));
+                    searching.set(false);
+                    clear_active_search_worker(token_id, active_token);
+                }
             }
-            let current = state.progress();
-            status.set(format!("{} pixels checked...", current.searched_pixels));
-            progress.set(current);
-            TimeoutFuture::new(16).await;
+        }));
+
+    let on_error = Closure::<dyn FnMut(ErrorEvent)>::wrap(Box::new(move |event: ErrorEvent| {
+        if active_token.get_untracked() == token_id {
+            status.set(format!("Search worker error: {}", event.message()));
+            searching.set(false);
+            clear_active_search_worker(token_id, active_token);
         }
+    }));
+
+    worker.set_onmessage(Some(on_message.as_ref().unchecked_ref()));
+    worker.set_onerror(Some(on_error.as_ref().unchecked_ref()));
+
+    ACTIVE_SEARCH_WORKER.with(|active| {
+        *active.borrow_mut() = Some(ActiveSearchWorker {
+            worker,
+            _on_message: on_message,
+            _on_error: on_error,
+        });
     });
 }
 
@@ -63,8 +162,16 @@ mod tests {
         PredicateInput, PredicateValue,
     };
     use noita_sim::filters::{Comparison, WandFilterKind};
+    use noita_sim::search::SearchMode;
     use noita_sim::WandStat;
 
+    #[test]
+    fn search_status_includes_pixels_per_second() {
+        assert_eq!(
+            format_search_status(12_345, 6_172.5),
+            "12345 pixels checked · 6172.50 px/s"
+        );
+    }
     #[test]
     fn default_query_matches_current_defaults() {
         let state = default_form_state();

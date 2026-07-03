@@ -24,7 +24,7 @@
 
 @font-face {
   font-family: "Noita Pixel";
-  src: url("/public/NoitaPixel.ttf") format("truetype");
+  src: url("public/NoitaPixel.ttf") format("truetype");
   font-weight: 400 700;
   font-display: swap;
 }
@@ -39,7 +39,7 @@
     @apply [color-scheme:dark];
   }
   body {
-    @apply m-0 min-h-screen bg-cave bg-[url(/public/orbroom.png)] bg-cover bg-fixed bg-center font-body text-[17px] leading-[1.45] text-parchment;
+    @apply m-0 min-h-screen bg-cave bg-[url(public/orbroom.png)] bg-cover bg-fixed bg-center font-body text-[17px] leading-[1.45] text-parchment;
   }
   h1,
   h2,

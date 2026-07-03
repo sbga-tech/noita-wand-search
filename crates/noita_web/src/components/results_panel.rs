@@ -49,7 +49,7 @@ fn frame_asset(spell: Spell) -> &'static str {
 #[component]
 fn SpellCard(spell: Spell, #[prop(default = true)] boxed: bool) -> impl IntoView {
     let card_class = if boxed {
-        "relative flex h-[42px] w-[42px] items-center justify-center bg-[url(/public/assets/inventory/inventory_box.png)] bg-[length:100%_100%] bg-center bg-no-repeat [image-rendering:pixelated]"
+        "relative flex h-[42px] w-[42px] items-center justify-center bg-[url(public/assets/inventory/inventory_box.png)] bg-[length:100%_100%] bg-center bg-no-repeat [image-rendering:pixelated]"
     } else {
         "relative flex h-[42px] w-[42px] items-center justify-center [image-rendering:pixelated]"
     };
@@ -63,13 +63,13 @@ fn SpellCard(spell: Spell, #[prop(default = true)] boxed: bool) -> impl IntoView
         <div class=card_class title=name.clone()>
             <img
                 class="relative z-[1] h-8 w-8 [image-rendering:pixelated]"
-                src=format!("/public/assets/gun_actions/{icon}.png")
+                src=format!("public/assets/gun_actions/{icon}.png")
                 alt=name.clone()
                 loading="lazy"
             />
             <img
                 class="pointer-events-none absolute inset-0 z-[2] h-full w-full [image-rendering:pixelated]"
-                src=format!("/public/assets/inventory/{frame}.png")
+                src=format!("public/assets/inventory/{frame}.png")
                 alt=""
                 aria-hidden="true"
             />
@@ -84,7 +84,7 @@ fn SpellCard(spell: Spell, #[prop(default = true)] boxed: bool) -> impl IntoView
 fn StatRow(icon: &'static str, label: &'static str, #[prop(into)] value: String) -> impl IntoView {
     view! {
         <div class="stat-label">
-            <img src=format!("/public/assets/inventory/{icon}.png") alt="" />
+            <img src=format!("public/assets/inventory/{icon}.png") alt="" />
             {label}
         </div>
         <div class="stat-value">{value}</div>
@@ -96,7 +96,7 @@ fn StatRow(icon: &'static str, label: &'static str, #[prop(into)] value: String)
 fn AlwaysCastRow(spell: Spell) -> impl IntoView {
     view! {
         <div class="stat-label mt-[0.6rem]">
-            <img src="/public/assets/inventory/icon_gun_permanent_actions.png" alt="" />
+            <img src="public/assets/inventory/icon_gun_permanent_actions.png" alt="" />
             "Always casts"
         </div>
         <div class="stat-value mt-[0.6rem] flex items-center gap-1">
@@ -131,7 +131,7 @@ fn WandCard(wand: Wand) -> impl IntoView {
         <div class="wand-card" style=format!("grid-template-areas: {areas};")>
             <p class="wand-name">{name.clone()}</p>
             <div class="wand-sprite">
-                <img src=format!("/public/assets/wands/wand_{:04}.png", wand.sprite) alt=name />
+                <img src=format!("public/assets/wands/wand_{:04}.png", wand.sprite) alt=name />
             </div>
             <StatRow icon="icon_gun_shuffle" label="Shuffle" value=if wand.shuffle { "Yes" } else { "No" } />
             <StatRow icon="icon_gun_actions_per_round" label="Spells/Cast" value=wand.multicast.to_string() />

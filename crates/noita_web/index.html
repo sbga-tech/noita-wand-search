@@ -5,7 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Noita Wand Search</title>
   <meta name="description" content="Big Wand Search for Noita" />
-  <link data-trunk rel="rust" data-wasm-opt="z" data-weak-refs />
+  <base data-trunk-public-url />
+  <link data-trunk rel="rust" data-bin="noita_web" data-wasm-opt="z" data-weak-refs />
+  <link data-trunk rel="rust" data-type="worker" data-bin="search_worker" data-bindgen-target="web" data-loader-shim data-wasm-opt="z" data-weak-refs />
   <link data-trunk rel="tailwind-css" href="style/tailwind.css" />
   <link data-trunk rel="copy-dir" href="public" />
   <link data-trunk rel="copy-file" href="node_modules/coi-serviceworker/coi-serviceworker.min.js" />

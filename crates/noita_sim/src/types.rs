@@ -14,7 +14,7 @@ pub enum WandStat {
     Speed,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Wand {
     pub capacity: i32,
     pub multicast: i32,
