@@ -6,6 +6,11 @@ dist = "dist"
 public_url = "/"
 filehash = true
 
+[[hooks]]
+stage = "pre_build"
+command = "node"
+command_arguments = ["tools/sync-assets.mjs"]
+
 
 [serve]
 headers = { "Cross-Origin-Opener-Policy" = "same-origin", "Cross-Origin-Embedder-Policy" = "require-corp" }

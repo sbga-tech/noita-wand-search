@@ -18,24 +18,29 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
+          lfs: true
+      - name: Fetch LFS assets
+        run: |
+          git lfs pull
+          git submodule foreach --recursive 'git lfs pull'
       - uses: dtolnay/rust-toolchain@nightly
         with:
           targets: wasm32-unknown-unknown
           components: rust-src
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2.9.1
       - run: npm ci --prefix crates/noita_web
       - run: cargo install trunk --locked
       - id: pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
       - name: Build dist
         run: |
           PUBLIC_URL="${{ steps.pages.outputs.base_path }}/"
           PATH="$PWD/node_modules/.bin:$PATH" trunk build --release=true --public-url "$PUBLIC_URL"
         working-directory: crates/noita_web
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: crates/noita_web/dist
 
@@ -47,4 +52,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
