@@ -8,7 +8,9 @@
   <link data-trunk rel="rust" data-wasm-opt="z" data-weak-refs />
   <link data-trunk rel="tailwind-css" href="style/tailwind.css" />
   <link data-trunk rel="copy-dir" href="public" />
-  <link rel="icon" href="/public/orbicon.webp" />
+  <link data-trunk rel="copy-file" href="node_modules/coi-serviceworker/coi-serviceworker.min.js" />
+  <link rel="icon" type="image/png" href="public/site-icon.png" />
+  <script src="coi-serviceworker.min.js"></script>
 </head>
 <body>
   <div id="app"></div>

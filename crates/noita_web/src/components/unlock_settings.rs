@@ -181,11 +181,14 @@ pub fn UnlockSettings(unlock_flags: RwSignal<Vec<String>>) -> impl IntoView {
         <fieldset class="field-set unlock-field-set">
             <details class="unlock-menu">
                 <summary>
-                    <span>
+                    <span class="unlock-summary-copy">
                         <span class="panel-title">"Unlock flags"</span>
                         <small>"Save-aware spell pools"</small>
                     </span>
-                    <b>{move || format!("{}/{}", selected_count(), total)}</b>
+                    <span class="unlock-summary-meta">
+                        <b>{move || format!("{}/{}", selected_count(), total)}</b>
+                        <span class="unlock-caret" aria-hidden="true"></span>
+                    </span>
                 </summary>
                 <div class="unlock-body">
                     <div

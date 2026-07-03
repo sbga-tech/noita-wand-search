@@ -1,3 +1,4 @@
+use crate::components::controls::{Combobox, Dropdown, SelectOption};
 use crate::components::unlock_settings::{all_unlock_flags, UnlockSettings};
 use leptos::prelude::*;
 use noita_sim::filters::{Comparison, FilterMode, WandFilter, WandFilterKind, WandFilterSet};
@@ -42,8 +43,14 @@ pub struct PredicateInput {
     pub id: u64,
     pub attribute: PredicateAttribute,
     pub comparison: Comparison,
+    #[serde(default = "default_predicate_amount")]
+    pub amount: String,
     pub value: PredicateValue,
     pub excluded: bool,
+}
+
+fn default_predicate_amount() -> String {
+    "1".to_string()
 }
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -172,6 +179,7 @@ impl PredicateAttribute {
             id,
             attribute: self,
             comparison,
+            amount: default_predicate_amount(),
             value,
             excluded: false,
         }
@@ -319,9 +327,10 @@ pub fn validate_state(state: &FormState) -> Result<SearchRequest, String> {
                                 FilterMode::Exclude => FilterMode::Include,
                             };
                         }
+                        let amount = parse_num::<usize>(&predicate.amount, "Amount")?.max(1);
                         WandFilterKind::SpellDeckRequirement {
                             value: spell,
-                            amount: 1,
+                            amount,
                         }
                     }
                 };
@@ -347,29 +356,76 @@ pub fn submit_label(_mode: SearchMode) -> &'static str {
     "Seek Big Wands"
 }
 
-fn numeric_condition_options(selected: &Comparison) -> impl IntoView + use<> {
-    view! {
-        <option value="equals" selected=matches!(selected, Comparison::Equals)>"equals"</option>
-        <option value="not_equals" selected=matches!(selected, Comparison::NotEquals)>"not equals"</option>
-        <option value="greater_than" selected=matches!(selected, Comparison::GreaterThan)>"greater than"</option>
-        <option value="greater_than_or_equals" selected=matches!(selected, Comparison::GreaterThanOrEquals)>"greater than or equals"</option>
-        <option value="less_than" selected=matches!(selected, Comparison::LessThan)>"less than"</option>
-        <option value="less_than_or_equals" selected=matches!(selected, Comparison::LessThanOrEquals)>"less than or equals"</option>
+fn numeric_condition_options() -> Vec<SelectOption> {
+    vec![
+        SelectOption::new("equals", "equals"),
+        SelectOption::new("not_equals", "not equals"),
+        SelectOption::new("greater_than", "greater than"),
+        SelectOption::new("greater_than_or_equals", "greater than or equals"),
+        SelectOption::new("less_than", "less than"),
+        SelectOption::new("less_than_or_equals", "less than or equals"),
+    ]
+}
+
+fn equality_condition_options() -> Vec<SelectOption> {
+    vec![
+        SelectOption::new("equals", "equals"),
+        SelectOption::new("not_equals", "not equals"),
+    ]
+}
+
+fn membership_condition_options() -> Vec<SelectOption> {
+    vec![
+        SelectOption::new("contains", "contains"),
+        SelectOption::new("excludes", "excludes"),
+    ]
+}
+
+fn comparison_to_value(comparison: &Comparison, membership: bool) -> &'static str {
+    if membership {
+        match comparison {
+            Comparison::NotEquals => "excludes",
+            _ => "contains",
+        }
+    } else {
+        match comparison {
+            Comparison::Equals => "equals",
+            Comparison::NotEquals => "not_equals",
+            Comparison::GreaterThan => "greater_than",
+            Comparison::GreaterThanOrEquals => "greater_than_or_equals",
+            Comparison::LessThan => "less_than",
+            Comparison::LessThanOrEquals => "less_than_or_equals",
+        }
     }
 }
 
-fn equality_condition_options(selected: &Comparison) -> impl IntoView + use<> {
-    view! {
-        <option value="equals" selected=matches!(selected, Comparison::Equals)>"equals"</option>
-        <option value="not_equals" selected=matches!(selected, Comparison::NotEquals)>"not equals"</option>
-    }
+fn attribute_options() -> Vec<SelectOption> {
+    [
+        PredicateAttribute::Capacity,
+        PredicateAttribute::Multicast,
+        PredicateAttribute::CastDelay,
+        PredicateAttribute::Reload,
+        PredicateAttribute::MaxMana,
+        PredicateAttribute::ManaRegen,
+        PredicateAttribute::Spread,
+        PredicateAttribute::Speed,
+        PredicateAttribute::Shuffle,
+        PredicateAttribute::SpellDeck,
+        PredicateAttribute::AlwaysCast,
+    ]
+    .into_iter()
+    .map(|variant| SelectOption::new(variant.value(), variant.label()))
+    .collect()
 }
 
-fn membership_condition_options(selected: &Comparison) -> impl IntoView + use<> {
-    view! {
-        <option value="contains" selected=matches!(selected, Comparison::Equals)>"contains"</option>
-        <option value="excludes" selected=matches!(selected, Comparison::NotEquals)>"excludes"</option>
-    }
+fn spell_options() -> Vec<SelectOption> {
+    Spell::ALL
+        .iter()
+        .map(|spell| {
+            let name = spell.display_name("en");
+            SelectOption::new(name, name)
+        })
+        .collect()
 }
 
 fn comparison_from_value(value: &str, constraint: ValidationConstraint) -> Comparison {
@@ -429,110 +485,144 @@ fn predicate_row(id: u64, predicates: RwSignal<Vec<PredicateInput>>) -> impl Int
                 .unwrap_or(false)
         })
     };
-
-    let attr_options = move || {
-        let attr = attribute.get();
-        [
-            PredicateAttribute::Capacity,
-            PredicateAttribute::Multicast,
-            PredicateAttribute::CastDelay,
-            PredicateAttribute::Reload,
-            PredicateAttribute::MaxMana,
-            PredicateAttribute::ManaRegen,
-            PredicateAttribute::Spread,
-            PredicateAttribute::Speed,
-            PredicateAttribute::Shuffle,
-            PredicateAttribute::SpellDeck,
-            PredicateAttribute::AlwaysCast,
-        ]
-        .into_iter()
-        .map(|variant| {
-            view! { <option value=variant.value() selected=variant == attr>{variant.label()}</option> }
+    let is_deck = move || attribute.get() == PredicateAttribute::SpellDeck;
+    let amount_snapshot = move || {
+        predicates.with(|items| {
+            items
+                .iter()
+                .find(|item| item.id == id)
+                .map(|item| item.amount.clone())
+                .unwrap_or_else(|| "1".to_string())
         })
-        .collect_view()
     };
 
-    let condition_view = move || {
+    let attribute_selected = Signal::derive(move || attribute.get().value().to_string());
+    let condition_options = Signal::derive(move || {
         let attr = attribute.get();
-        let current = comparison_snapshot();
         match attr {
-            PredicateAttribute::SpellDeck => membership_condition_options(&current).into_any(),
+            PredicateAttribute::SpellDeck => membership_condition_options(),
             _ => match attr.constraint() {
                 ValidationConstraint::Number | ValidationConstraint::Integer => {
-                    numeric_condition_options(&current).into_any()
+                    numeric_condition_options()
                 }
-                _ => equality_condition_options(&current).into_any(),
+                _ => equality_condition_options(),
             },
         }
+    });
+    let condition_selected =
+        Signal::derive(move || comparison_to_value(&comparison_snapshot(), is_deck()).to_string());
+
+    let value_kind = Memo::new(move |_| match value_snapshot() {
+        PredicateValue::Number(_) => 0u8,
+        PredicateValue::Boolean(_) => 1,
+        PredicateValue::String(_) => 2,
+        PredicateValue::List(_) => 3,
+    });
+    let number_snapshot = move || match value_snapshot() {
+        PredicateValue::Number(value) => value,
+        _ => String::new(),
+    };
+    let bool_snapshot = move || matches!(value_snapshot(), PredicateValue::Boolean(true));
+    let string_snapshot = move || match value_snapshot() {
+        PredicateValue::String(value) => value,
+        _ => String::new(),
+    };
+    let list_len_snapshot = move || match value_snapshot() {
+        PredicateValue::List(values) => values.len(),
+        _ => 0,
     };
 
     let value_view = move || {
-        let attr = attribute.get();
-        match value_snapshot() {
-            PredicateValue::Number(value) => {
-                let inputmode = if attr.constraint() == ValidationConstraint::Integer {
-                    "numeric"
-                } else {
-                    "decimal"
-                };
-                view! {
-                    <input class="predicate-value atlas-input" type="text" inputmode=inputmode prop:value=value placeholder=if inputmode == "numeric" { "integer" } else { "number" } on:input=move |ev| {
-                        let value = event_target_value(&ev);
-                        predicates.update(|items| if let Some(item) = items.iter_mut().find(|item| item.id == id) { item.value = PredicateValue::Number(value); });
-                    } />
-                }.into_any()
-            },
-            PredicateValue::Boolean(value) => view! {
-                <select class="predicate-value atlas-input" on:change=move |ev| {
-                    let value = event_target_value(&ev) == "true";
-                    predicates.update(|items| if let Some(item) = items.iter_mut().find(|item| item.id == id) { item.value = PredicateValue::Boolean(value); });
-                }>
-                    <option value="true" selected=value>"true"</option>
-                    <option value="false" selected=!value>"false"</option>
-                </select>
-            }.into_any(),
-            PredicateValue::String(value) => view! {
-                <input class="predicate-value atlas-input" prop:value=value list="spell-names" placeholder="spell name" on:input=move |ev| {
+        match value_kind.get() {
+        0 => view! {
+            <input
+                class="predicate-value atlas-input"
+                type="text"
+                inputmode=move || if attribute.get().constraint() == ValidationConstraint::Integer { "numeric" } else { "decimal" }
+                prop:value=number_snapshot
+                placeholder=move || if attribute.get().constraint() == ValidationConstraint::Integer { "integer" } else { "number" }
+                on:input=move |ev| {
                     let value = event_target_value(&ev);
+                    predicates.update(|items| if let Some(item) = items.iter_mut().find(|item| item.id == id) { item.value = PredicateValue::Number(value); });
+                }
+            />
+        }.into_any(),
+        1 => view! {
+            <Dropdown
+                options=Signal::derive(|| vec![SelectOption::new("true", "true"), SelectOption::new("false", "false")])
+                selected=Signal::derive(move || if bool_snapshot() { "true".to_string() } else { "false".to_string() })
+                on_select=Callback::new(move |value: String| {
+                    let value = value == "true";
+                    predicates.update(|items| if let Some(item) = items.iter_mut().find(|item| item.id == id) { item.value = PredicateValue::Boolean(value); });
+                })
+                class="predicate-value"
+            />
+        }.into_any(),
+        2 => view! {
+            <Combobox
+                options=Signal::derive(spell_options)
+                value=Signal::derive(string_snapshot)
+                on_input=Callback::new(move |value: String| {
                     predicates.update(|items| if let Some(item) = items.iter_mut().find(|item| item.id == id) { item.value = PredicateValue::String(value); });
-                } />
-            }.into_any(),
-            PredicateValue::List(values) => view! {
-                <input class="predicate-value atlas-input" value=format!("{} values", values.len()) disabled=true />
-            }.into_any(),
-        }
+                })
+                placeholder="spell name"
+                class="predicate-value"
+            />
+        }.into_any(),
+        _ => view! {
+            <input class="predicate-value atlas-input" prop:value=move || format!("{} values", list_len_snapshot()) disabled=true />
+        }.into_any(),
+    }
     };
 
     view! {
-        <div class="predicate-row">
-            <label class="field"><span class="field-label">"Attribute"</span>
-                <select class="predicate-attribute atlas-input" on:change=move |ev| {
-                    let attribute = PredicateAttribute::from_value(&event_target_value(&ev));
-                    predicates.update(|items| if let Some(item) = items.iter_mut().find(|item| item.id == id) { *item = PredicateInput::new(id, attribute); });
-                }>
-                    {attr_options}
-                </select>
+        <div class="predicate-row grid items-end gap-2 border-2 border-bronze p-2 bg-[rgba(10,8,6,0.6)] grid-cols-[8.5rem_minmax(0,1fr)_6.5rem_2.5rem]">
+            <label class="field"><span class="field-label text-[0.6rem]">"Attribute"</span>
+                <Dropdown
+                    options=Signal::derive(attribute_options)
+                    selected=attribute_selected
+                    on_select=Callback::new(move |value: String| {
+                        let attribute = PredicateAttribute::from_value(&value);
+                        predicates.update(|items| if let Some(item) = items.iter_mut().find(|item| item.id == id) { *item = PredicateInput::new(id, attribute); });
+                    })
+                    class="predicate-attribute"
+                />
             </label>
-            <label class="field"><span class="field-label">"Condition"</span>
-                <select class="predicate-condition atlas-input" on:change=move |ev| {
-                    let constraint = attribute.get_untracked().constraint();
-                    let comparison = comparison_from_value(&event_target_value(&ev), constraint);
-                    predicates.update(|items| if let Some(item) = items.iter_mut().find(|item| item.id == id) { item.comparison = comparison; });
-                }>
-                    {condition_view}
-                </select>
+            <div class="predicate-group flex min-w-0 items-end gap-2">
+                <label class="field w-[7.5rem] shrink-0"><span class="field-label text-[0.6rem]">"Condition"</span>
+                    <Dropdown
+                        options=condition_options
+                        selected=condition_selected
+                        on_select=Callback::new(move |value: String| {
+                            let constraint = attribute.get_untracked().constraint();
+                            let comparison = comparison_from_value(&value, constraint);
+                            predicates.update(|items| if let Some(item) = items.iter_mut().find(|item| item.id == id) { item.comparison = comparison; });
+                        })
+                        class="predicate-condition"
+                    />
+                </label>
+                <Show when=is_deck>
+                    <label class="field w-[3rem] shrink-0"><span class="field-label text-[0.6rem]">"Amount"</span>
+                        <input class="predicate-amount atlas-input w-full px-1 text-center" type="number" min="1" step="1" prop:value=amount_snapshot on:input=move |ev| {
+                            let amount = event_target_value(&ev);
+                            predicates.update(|items| if let Some(item) = items.iter_mut().find(|item| item.id == id) { item.amount = amount; });
+                        } />
+                    </label>
+                </Show>
+                <label class="field min-w-0 flex-1"><span class="field-label text-[0.6rem]">"Value"</span>{value_view}</label>
+            </div>
+            <label class="field"><span class="field-label text-[0.6rem]">"Then"</span>
+                <Dropdown
+                    options=Signal::derive(|| vec![SelectOption::new("include", "include"), SelectOption::new("exclude", "exclude")])
+                    selected=Signal::derive(move || if excluded_snapshot() { "exclude".to_string() } else { "include".to_string() })
+                    on_select=Callback::new(move |value: String| {
+                        let excluded = value == "exclude";
+                        predicates.update(|items| if let Some(item) = items.iter_mut().find(|item| item.id == id) { item.excluded = excluded; });
+                    })
+                    class="predicate-mode"
+                />
             </label>
-            <label class="field"><span class="field-label">"Value"</span>{value_view}</label>
-            <label class="field"><span class="field-label">"Then"</span>
-                <select class="predicate-mode atlas-input" on:change=move |ev| {
-                    let excluded = event_target_value(&ev) == "exclude";
-                    predicates.update(|items| if let Some(item) = items.iter_mut().find(|item| item.id == id) { item.excluded = excluded; });
-                }>
-                    <option value="include" selected=!excluded_snapshot()>"include"</option>
-                    <option value="exclude" selected=excluded_snapshot()>"exclude"</option>
-                </select>
-            </label>
-            <button type="button" class="remove-predicate btn btn-danger" title="remove predicate" on:click=move |_| {
+            <button type="button" class="remove-predicate btn btn-danger w-[2.5rem] px-0 text-lg" title="remove predicate" on:click=move |_| {
                 predicates.update(|items| items.retain(|item| item.id != id));
             }>"×"</button>
         </div>
@@ -645,11 +735,26 @@ pub fn ControlPanel(
                     <div class="origin-grid">
                         <label class="field"><span class="field-label">"Seed"</span><input id="seed" name="seed" class="atlas-input" type="text" inputmode="numeric" prop:value=move || seed.get() on:input=move |ev| seed.set(event_target_value(&ev)) /></label>
                         <label class="field"><span class="field-label">"NG+"</span><input id="ng" name="ng" class="atlas-input" type="text" inputmode="numeric" prop:value=move || ng.get() on:input=move |ev| ng.set(event_target_value(&ev)) /></label>
-                        <label class="field"><span class="field-label">"Search type"</span><select id="search_mode" name="search_mode" class="atlas-input" on:change=move |ev| {
-                            let selected = match event_target_value(&ev).as_str() { "1" => SearchMode::TaikasauvaWand, "2" => SearchMode::TinyDropWand, _ => SearchMode::EoeWand };
-                            mode.set(selected);
-                            if selected == SearchMode::TinyDropWand { x.set("14941".to_string()); y.set("18654".to_string()); }
-                        }><option value="0" selected=move || mode.get() == SearchMode::EoeWand>"EoE Wand"</option><option value="1" selected=move || mode.get() == SearchMode::TaikasauvaWand>"Taikasauva Wand"</option><option value="2" selected=move || mode.get() == SearchMode::TinyDropWand>"Tiny Drop"</option></select></label>
+                        <label class="field"><span class="field-label">"Search type"</span>
+                            <Dropdown
+                                options=Signal::derive(|| vec![
+                                    SelectOption::new("0", "EoE Wand"),
+                                    SelectOption::new("1", "Taikasauva Wand"),
+                                    SelectOption::new("2", "Tiny Drop"),
+                                ])
+                                selected=Signal::derive(move || match mode.get() {
+                                    SearchMode::EoeWand => "0",
+                                    SearchMode::TaikasauvaWand => "1",
+                                    SearchMode::TinyDropWand => "2",
+                                }.to_string())
+                                on_select=Callback::new(move |value: String| {
+                                    let selected = match value.as_str() { "1" => SearchMode::TaikasauvaWand, "2" => SearchMode::TinyDropWand, _ => SearchMode::EoeWand };
+                                    mode.set(selected);
+                                    if selected == SearchMode::TinyDropWand { x.set("14941".to_string()); y.set("18654".to_string()); }
+                                })
+                                class="search-mode"
+                            />
+                        </label>
                     </div>
                     <div class="coords-grid">
                         <label class="field"><span class="field-label">"x"</span><input id="x" name="x" class="atlas-input" type="text" inputmode="numeric" prop:value=move || x.get() on:input=move |ev| x.set(event_target_value(&ev)) /></label>
@@ -675,9 +780,6 @@ pub fn ControlPanel(
                     <button id="cancel_button" type="button" class="cancel-button btn btn-ghost" prop:disabled=move || !searching.get() on:click=cancel>"cancel"</button>
                 </div>
             </form>
-            <datalist id="spell-names">
-                {Spell::ALL.iter().map(|spell| view! { <option value=spell.display_name("en")></option> }).collect_view()}
-            </datalist>
         </section>
     }
 }
@@ -693,6 +795,7 @@ mod tests {
             id: 1,
             attribute: PredicateAttribute::Capacity,
             comparison: Comparison::GreaterThan,
+            amount: "1".into(),
             value: PredicateValue::Number("61".into()),
             excluded: false,
         }];
@@ -708,6 +811,7 @@ mod tests {
             id: 1,
             attribute: PredicateAttribute::SpellDeck,
             comparison: Comparison::Equals,
+            amount: "1".into(),
             value: PredicateValue::String("Circle of stillness".into()),
             excluded: false,
         }];
@@ -724,10 +828,47 @@ mod tests {
             id: 1,
             attribute: PredicateAttribute::AlwaysCast,
             comparison: Comparison::Equals,
+            amount: "1".into(),
             value: PredicateValue::String("Circle of stillness".into()),
             excluded: false,
         }];
 
         assert!(validate_state(&state).is_ok());
+    }
+
+    #[test]
+    fn validate_state_passes_deck_amount_into_filter() {
+        let mut state = default_form_state();
+        state.predicates = vec![PredicateInput {
+            id: 1,
+            attribute: PredicateAttribute::SpellDeck,
+            comparison: Comparison::Equals,
+            amount: "3".into(),
+            value: PredicateValue::String("Add mana".into()),
+            excluded: false,
+        }];
+
+        let request = validate_state(&state).expect("deck filter should validate");
+        let kind = &request.wand_filters.filters[0].kind;
+        assert!(matches!(
+            kind,
+            WandFilterKind::SpellDeckRequirement { amount: 3, .. }
+        ));
+    }
+
+    #[test]
+    fn validate_state_clamps_blank_deck_amount_error() {
+        let mut state = default_form_state();
+        state.predicates = vec![PredicateInput {
+            id: 1,
+            attribute: PredicateAttribute::SpellDeck,
+            comparison: Comparison::Equals,
+            amount: "".into(),
+            value: PredicateValue::String("Add mana".into()),
+            excluded: false,
+        }];
+
+        let error = validate_state(&state).expect_err("blank amount should not parse");
+        assert!(error.contains("Amount"));
     }
 }

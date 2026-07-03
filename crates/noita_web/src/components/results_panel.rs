@@ -2,9 +2,10 @@ use leptos::prelude::*;
 use noita_sim::data::{Spell, WAND_SPRITES};
 use noita_sim::search::{SearchHit, SearchMode};
 use noita_sim::types::Wand;
+use noita_sim::ActionType;
 
 pub fn heading(_mode: SearchMode) -> &'static str {
-    "Wands"
+    "Result"
 }
 
 pub fn uncertainty_suffix(mode: SearchMode, x: f64, y: f64) -> &'static str {
@@ -17,41 +18,6 @@ pub fn uncertainty_suffix(mode: SearchMode, x: f64, y: f64) -> &'static str {
     }
 }
 
-fn deck_names(wand: &Wand) -> Vec<&'static str> {
-    let capacity = wand.capacity.max(0) as usize;
-    let mut names = wand
-        .spells
-        .iter()
-        .map(|spell| spell.display_name("en"))
-        .collect::<Vec<_>>();
-    names.resize(capacity.max(names.len()), "None");
-    names
-}
-
-pub fn format_wand(wand: &Wand) -> String {
-    let deck = deck_names(wand).join(", ");
-    format!("capacity: {}; multicast: {}; cast delay: {:.2}s; reload: {:.2}s; max mana: {}; mana regen: {}; spread: {}°; speed: {:.3}x; {}; always-cast: {}; sprite: {}; deck: [{}]",
-        wand.capacity, wand.multicast, wand.delay, wand.reload, wand.mana, wand.regen, wand.spread, wand.speed, if wand.shuffle { "shuffle" } else { "nonshuffle" }, wand.always_cast.display_name("en"), wand.sprite, deck)
-}
-
-pub fn format_hit(mode: SearchMode, hit: &SearchHit) -> String {
-    let SearchHit::Wand { x, y, wand, .. } = hit;
-    format!(
-        "Wand found at x = {x}{}, y = {y}{}. {}",
-        uncertainty_suffix(mode, *x, *y),
-        uncertainty_suffix(mode, *x, *y),
-        format_wand(wand)
-    )
-}
-
-/// Minimal HTML escaping for text interpolated into `inner_html`.
-fn escape(text: &str) -> String {
-    text.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-}
-
 /// Human-readable wand sprite/staff name for the card heading.
 fn wand_name(wand: &Wand) -> &'static str {
     WAND_SPRITES
@@ -60,121 +26,144 @@ fn wand_name(wand: &Wand) -> &'static str {
         .unwrap_or("Wand")
 }
 
-/// One inventory-icon stat row: an icon+label cell and a value cell.
-fn stat_row(icon: &str, label: &str, value: &str) -> String {
-    format!(
-        "<div class=\"stat-label\"><img src=\"/public/assets/inventory/{icon}.png\" alt=\"\" />{label}</div><div class=\"stat-value\">{value}</div>"
-    )
+/// Inventory frame (`ui_gfx/inventory/item_bg_*`) overlaid on a spell icon,
+/// picked by the spell's [`ActionType`] — the same frames the game draws behind
+/// inventory items.
+fn frame_asset(spell: Spell) -> &'static str {
+    match spell.action_type() {
+        ActionType::Projectile => "item_bg_projectile",
+        ActionType::StaticProjectile => "item_bg_static_projectile",
+        ActionType::Modifier => "item_bg_modifier",
+        ActionType::DrawMany => "item_bg_draw_many",
+        ActionType::Material => "item_bg_material",
+        ActionType::Other => "item_bg_other",
+        ActionType::Utility => "item_bg_utility",
+        ActionType::Passive => "item_bg_passive",
+    }
 }
 
-/// A single spell slot: the gun-action icon on a dashed frame, or, for
-/// [`Spell::None`], an empty frame (matching an unfilled capacity slot).
-fn spell_box(spell: Spell) -> String {
+/// A single spell card: the gun-action glyph with its type frame overlaid. In an
+/// inventory slot (`boxed`) it sits on the `inventory_box` background — an empty
+/// slot renders just that box; the always-cast permanent action is not a slot,
+/// so it is drawn unboxed.
+#[component]
+fn SpellCard(spell: Spell, #[prop(default = true)] boxed: bool) -> impl IntoView {
+    let card_class = if boxed {
+        "relative flex h-[42px] w-[42px] items-center justify-center bg-[url(/public/assets/inventory/inventory_box.png)] bg-[length:100%_100%] bg-center bg-no-repeat [image-rendering:pixelated]"
+    } else {
+        "relative flex h-[42px] w-[42px] items-center justify-center [image-rendering:pixelated]"
+    };
     let icon = spell.icon();
     if spell == Spell::None || icon.is_empty() {
-        return "<div class=\"wand-card-spell\"></div>".to_string();
+        return view! { <div class=card_class></div> }.into_any();
     }
-    let name = escape(spell.display_name("en"));
-    format!(
-        "<div class=\"wand-card-spell\" title=\"{name}\"><img src=\"/public/assets/gun_actions/{icon}.png\" alt=\"{name}\" loading=\"lazy\" /></div>"
-    )
+    let name = spell.display_name("en").to_string();
+    let frame = frame_asset(spell);
+    view! {
+        <div class=card_class title=name.clone()>
+            <img
+                class="relative z-[1] h-8 w-8 [image-rendering:pixelated]"
+                src=format!("/public/assets/gun_actions/{icon}.png")
+                alt=name.clone()
+                loading="lazy"
+            />
+            <img
+                class="pointer-events-none absolute inset-0 z-[2] h-full w-full [image-rendering:pixelated]"
+                src=format!("/public/assets/inventory/{frame}.png")
+                alt=""
+                aria-hidden="true"
+            />
+        </div>
+    }
+    .into_any()
 }
 
-/// The always-cast row rendered like the wiki's permanent-actions row: a small
-/// spell icon rather than a stat value.
-fn always_cast_row(spell: Spell) -> String {
-    let icon = spell.icon();
-    let name = escape(spell.display_name("en"));
-    let inner = if icon.is_empty() {
-        format!("<span>{name}</span>")
-    } else {
-        format!("<img src=\"/public/assets/gun_actions/{icon}.png\" alt=\"{name}\" title=\"{name}\" loading=\"lazy\" />")
-    };
-    format!(
-        "<div class=\"stat-label always-cast-label\"><img src=\"/public/assets/inventory/icon_gun_permanent_actions.png\" alt=\"\" />Always casts</div><div class=\"stat-value always-cast-spells\">{inner}</div>"
-    )
+/// One inventory-icon stat row: an icon+label cell and a value cell (two direct
+/// grid children of the wand card).
+#[component]
+fn StatRow(icon: &'static str, label: &'static str, #[prop(into)] value: String) -> impl IntoView {
+    view! {
+        <div class="stat-label">
+            <img src=format!("/public/assets/inventory/{icon}.png") alt="" />
+            {label}
+        </div>
+        <div class="stat-value">{value}</div>
+    }
 }
 
-/// Renders a wand as a Noita-style wand card matching the game/wiki layout.
-fn wand_html(wand: &Wand) -> String {
-    let mut rows = vec![
-        stat_row(
-            "icon_gun_shuffle",
-            "Shuffle",
-            if wand.shuffle { "Yes" } else { "No" },
-        ),
-        stat_row(
-            "icon_gun_actions_per_round",
-            "Spells/Cast",
-            &wand.multicast.to_string(),
-        ),
-        stat_row(
-            "icon_fire_rate_wait",
-            "Cast delay",
-            &format!("{:.2} s", wand.delay),
-        ),
-        stat_row(
-            "icon_gun_reload_time",
-            "Rechrg. Time",
-            &format!("{:.2} s", wand.reload),
-        ),
-        stat_row("icon_mana_max", "Mana max", &wand.mana.to_string()),
-        stat_row(
-            "icon_mana_charge_speed",
-            "Mana chg. Spd",
-            &wand.regen.to_string(),
-        ),
-        stat_row("icon_gun_capacity", "Capacity", &wand.capacity.to_string()),
-        stat_row(
-            "icon_spread_degrees",
-            "Spread",
-            &format!("{:.1} DEG", wand.spread as f64),
-        ),
-        stat_row(
-            "icon_speed_multiplier",
-            "Speed",
-            &format!("\u{00d7}\u{00a0}{:.2}", wand.speed),
-        ),
-    ];
-    if wand.always_cast != Spell::None {
-        rows.push(always_cast_row(wand.always_cast));
+/// Always-cast row: a permanent-actions label and the framed spell icon.
+#[component]
+fn AlwaysCastRow(spell: Spell) -> impl IntoView {
+    view! {
+        <div class="stat-label mt-[0.6rem]">
+            <img src="/public/assets/inventory/icon_gun_permanent_actions.png" alt="" />
+            "Always casts"
+        </div>
+        <div class="stat-value mt-[0.6rem] flex items-center gap-1">
+            <SpellCard spell boxed=false />
+        </div>
     }
+}
+
+/// A wand rendered as a Noita-style card matching the game/wiki layout.
+#[component]
+fn WandCard(wand: Wand) -> impl IntoView {
+    let has_always_cast = wand.always_cast != Spell::None;
 
     // Grid areas: the sprite spans the name row plus every stat row so it sits
-    // centered beside the ledger, exactly like the wiki template.
+    // beside the ledger, exactly like the wiki template.
+    let stat_rows = 9 + usize::from(has_always_cast);
     let mut areas = String::from("'name name image'");
-    for _ in &rows {
+    for _ in 0..stat_rows {
         areas.push_str(" 'label value image'");
     }
     areas.push_str(" 'spells spells spells'");
 
     let capacity = wand.capacity.max(0) as usize;
     let slots = capacity.max(wand.spells.len());
-    let spells = (0..slots)
-        .map(|i| spell_box(wand.spells.get(i).copied().unwrap_or(Spell::None)))
-        .collect::<String>();
+    let deck = (0..slots)
+        .map(|i| wand.spells.get(i).copied().unwrap_or(Spell::None))
+        .collect::<Vec<_>>();
 
-    format!(
-        "<div class=\"wand-card\" style=\"grid-template-areas: {areas};\">\
-           <p class=\"wand-name\">{name}</p>\
-           <div class=\"wand-sprite\"><img src=\"/public/assets/wands/wand_{sprite:04}.png\" alt=\"{name}\" /></div>\
-           {rows}\
-           <div class=\"spell-container\">{spells}</div>\
-         </div>",
-        name = escape(&wand_name(wand).to_uppercase()),
-        sprite = wand.sprite,
-        rows = rows.concat(),
-    )
+    let name = wand_name(&wand).to_uppercase();
+
+    view! {
+        <div class="wand-card" style=format!("grid-template-areas: {areas};")>
+            <p class="wand-name">{name.clone()}</p>
+            <div class="wand-sprite">
+                <img src=format!("/public/assets/wands/wand_{:04}.png", wand.sprite) alt=name />
+            </div>
+            <StatRow icon="icon_gun_shuffle" label="Shuffle" value=if wand.shuffle { "Yes" } else { "No" } />
+            <StatRow icon="icon_gun_actions_per_round" label="Spells/Cast" value=wand.multicast.to_string() />
+            <StatRow icon="icon_fire_rate_wait" label="Cast delay" value=format!("{:.2} s", wand.delay) />
+            <StatRow icon="icon_gun_reload_time" label="Rechrg. Time" value=format!("{:.2} s", wand.reload) />
+            <StatRow icon="icon_mana_max" label="Mana max" value=wand.mana.to_string() />
+            <StatRow icon="icon_mana_charge_speed" label="Mana chg. Spd" value=wand.regen.to_string() />
+            <StatRow icon="icon_gun_capacity" label="Capacity" value=wand.capacity.to_string() />
+            <StatRow icon="icon_spread_degrees" label="Spread" value=format!("{:.1} DEG", wand.spread as f64) />
+            <StatRow icon="icon_speed_multiplier" label="Speed" value=format!("\u{00d7}\u{00a0}{:.2}", wand.speed) />
+            <Show when=move || has_always_cast>
+                <AlwaysCastRow spell=wand.always_cast />
+            </Show>
+            <div class="mt-4 flex flex-wrap gap-[0.3rem] [grid-area:spells]">
+                <For each=move || deck.clone().into_iter().enumerate() key=|(i, _)| *i let:entry>
+                    <SpellCard spell=entry.1 />
+                </For>
+            </div>
+        </div>
+    }
 }
 
-pub fn format_hit_html(mode: SearchMode, hit: &SearchHit) -> String {
+/// A found-wand result: title, coordinates, and the wand card.
+#[component]
+fn WandHit(mode: SearchMode, hit: SearchHit) -> impl IntoView {
     let SearchHit::Wand { x, y, wand, .. } = hit;
-    format!(
-        "<div class=\"hit-title\">Wand found</div><div class=\"coords\">x = {x}{} · y = {y}{}</div>{}",
-        uncertainty_suffix(mode, *x, *y),
-        uncertainty_suffix(mode, *x, *y),
-        wand_html(wand)
-    )
+    let suffix = uncertainty_suffix(mode, x, y);
+    view! {
+        <div class="mb-1 font-display text-xl uppercase tracking-widest text-gold-bright">"Wand found"</div>
+        <div class="mb-3 tabular-nums text-parchment">{format!("x = {x}{suffix} · y = {y}{suffix}")}</div>
+        <WandCard wand />
+    }
 }
 
 #[component]
@@ -184,20 +173,26 @@ pub fn ResultsPanel(
     result: ReadSignal<Option<SearchHit>>,
     mode: ReadSignal<SearchMode>,
 ) -> impl IntoView {
-    let output_html = move || {
-        if !error.get().is_empty() {
-            format!("<div class=\"error\">{}</div>", error.get())
+    let body = move || {
+        let error = error.get();
+        if !error.is_empty() {
+            view! { <div class="border-2 border-blood bg-[rgba(194,55,29,0.15)] p-4 text-center text-[#ffb3a6]">{error}</div> }.into_any()
         } else if let Some(hit) = result.get() {
-            format_hit_html(mode.get(), &hit)
+            view! { <WandHit mode=mode.get() hit /> }.into_any()
         } else {
-            "<div class=\"empty-result\">Submit a search to reveal the wand ledger.</div>"
-                .to_string()
+            view! {
+                <div class="border-2 border-dashed border-bronze p-4 text-center text-parchment-dim">"Complete a search to reveal the wand info."</div>
+            }
+            .into_any()
         }
     };
     view! {
         <section id="output_box" class="panel results">
-            <div class="panel-head"><h2 class="panel-title">{move || heading(mode.get())}</h2><span id="status">{move || status.get()}</span></div>
-            <div id="output" inner_html=output_html></div>
+            <div class="panel-head">
+                <h2 class="panel-title">{move || heading(mode.get())}</h2>
+                <span id="status">{move || status.get()}</span>
+            </div>
+            <div id="output">{body}</div>
         </section>
     }
 }
@@ -224,38 +219,42 @@ mod tests {
     }
 
     #[test]
-    fn card_uses_game_assets_and_wiki_structure() {
-        let html = wand_html(&sample_wand());
-        assert!(html.contains("class=\"wand-card\""));
-        // Sprite index -> zero-padded wand file.
-        assert!(html.contains("/public/assets/wands/wand_0821.png"));
-        // Inventory stat icon + label/value cells.
-        assert!(html.contains("/public/assets/inventory/icon_gun_shuffle.png"));
-        assert!(html.contains("<div class=\"stat-value\">No</div>"));
-        assert!(html.contains("0.32 s"));
-        assert!(html.contains("\u{00d7}\u{00a0}1.00"));
-        // Spell icons resolve via Spell::icon (divergent basename included).
-        assert!(html.contains("/public/assets/gun_actions/mana.png"));
-        assert!(html.contains("/public/assets/gun_actions/phantomshot_a.png"));
+    fn frame_asset_follows_action_type() {
+        // Projectile spell -> projectile frame.
+        assert_eq!(frame_asset(Spell::CircleshotA), "item_bg_projectile");
+        // Modifier spell -> modifier frame (the reference asset).
+        assert_eq!(frame_asset(Spell::ManaReduce), "item_bg_modifier");
+        assert_eq!(frame_asset(Spell::Homing), "item_bg_modifier");
+        // Material spell -> material frame.
+        assert_eq!(frame_asset(Spell::Soilball), "item_bg_material");
     }
 
     #[test]
-    fn always_cast_row_only_when_present() {
-        let with = wand_html(&sample_wand());
-        assert!(with.contains("icon_gun_permanent_actions.png"));
-        assert!(with.contains("/public/assets/gun_actions/homing.png"));
-
-        let mut plain = sample_wand();
-        plain.always_cast = Spell::None;
-        let without = wand_html(&plain);
-        assert!(!without.contains("icon_gun_permanent_actions.png"));
+    fn spell_action_types_resolve() {
+        assert_eq!(Spell::Mana.action_type(), ActionType::Projectile);
+        assert_eq!(Spell::ManaReduce.action_type(), ActionType::Modifier);
+        assert_eq!(
+            Spell::BlackHoleBig.action_type(),
+            ActionType::StaticProjectile
+        );
     }
 
     #[test]
-    fn empty_capacity_slots_render_as_blank_boxes() {
-        // capacity 3, two spells -> three slots, one empty.
-        let html = wand_html(&sample_wand());
-        assert_eq!(html.matches("class=\"wand-card-spell\"").count(), 3);
-        assert!(html.contains("<div class=\"wand-card-spell\"></div>"));
+    fn wand_name_resolves_sprite() {
+        let wand = sample_wand();
+        assert_eq!(wand_name(&wand), WAND_SPRITES[821].name);
+    }
+
+    #[test]
+    fn uncertainty_scales_with_distance() {
+        assert_eq!(uncertainty_suffix(SearchMode::EoeWand, 0.0, 0.0), "");
+        assert_eq!(
+            uncertainty_suffix(SearchMode::EoeWand, 2_000_000.0, 0.0),
+            " ± 5"
+        );
+        assert_eq!(
+            uncertainty_suffix(SearchMode::EoeWand, 20_000_000.0, 0.0),
+            " ± 50"
+        );
     }
 }

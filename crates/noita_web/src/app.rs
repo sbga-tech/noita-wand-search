@@ -80,10 +80,10 @@ fn AtlasPage() -> impl IntoView {
     view! {
         <div class="background-dim"></div>
         <main class="atlas-shell">
-            <header class="hero">
-                <img src="/public/orbicon.webp" alt="" />
+            <header class="mb-6 flex items-center">
+                <img class="h-16 w-auto [image-rendering:pixelated]" src="/public/site-icon.png" alt="" />
                 <div>
-                    <p class="kicker">"Arcane cartographer's atlas"</p>
+                    <p class="m-0 mt-2 max-w-[70ch] font-display text-sm uppercase tracking-[0.34em] text-parchment-dim">"Arcane cartographer's atlas"</p>
                     <h1 class="atlas-title">"Noita Wand Search"</h1>
                 </div>
             </header>

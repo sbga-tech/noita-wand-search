@@ -832,6 +832,10 @@ fn generated_spells(actions: &[Action], locales: &[String]) -> String {
         .iter()
         .map(|action| Literal::string(&action.icon))
         .collect::<Vec<_>>();
+    let action_type_variants = actions
+        .iter()
+        .map(|action| format_ident!("{}", variant_name(ACTION_TYPES[action.action_type_index])))
+        .collect::<Vec<_>>();
     let en_index = locales
         .iter()
         .position(|locale| locale == "en")
@@ -935,6 +939,13 @@ fn generated_spells(actions: &[Action], locales: &[String]) -> String {
             pub fn icon(self) -> &'static str {
                 match self {
                     #(Self::#variants => #icons,)*
+                }
+            }
+
+            /// Gameplay action category, driving the inventory frame overlay.
+            pub fn action_type(self) -> crate::data::ActionType {
+                match self {
+                    #(Self::#variants => crate::data::ActionType::#action_type_variants,)*
                 }
             }
 
