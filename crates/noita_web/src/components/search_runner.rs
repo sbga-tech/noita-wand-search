@@ -43,7 +43,7 @@ pub fn compact_number(value: f64) -> String {
     }
 }
 
-fn format_search_status(searched_pixels: u32, pixels_per_second: f64) -> String {
+fn format_search_status(searched_pixels: u64, pixels_per_second: f64) -> String {
     format!(
         "{} px {} px/s",
         compact_number(searched_pixels as f64),

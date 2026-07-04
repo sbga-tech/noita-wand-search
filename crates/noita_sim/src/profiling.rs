@@ -204,7 +204,7 @@ fn loot_spawner(config: &Config) -> LootSpawner {
     )
 }
 
-fn bench_search(config: &Config) -> Timed<u32> {
+fn bench_search(config: &Config) -> Timed<u64> {
     let request = SearchRequest {
         seed: config.seed,
         ng: config.ng,
@@ -216,7 +216,7 @@ fn bench_search(config: &Config) -> Timed<u32> {
     };
     let mut state = SearchState::new(request);
     let start = Instant::now();
-    while state.progress().searched_pixels < config.iterations as u32 {
+    while state.progress().searched_pixels < config.iterations as u64 {
         black_box(state.step(config.batch));
     }
     let elapsed = start.elapsed();

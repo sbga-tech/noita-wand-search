@@ -2,6 +2,8 @@
 
 This tool searches wands from various loot with a set of custom filters in the game Noita.
 
+[Try Now](https://noita.oshino.moe)
+
 ## Local development
 
 ```sh
@@ -28,7 +30,11 @@ cd crates/noita_web && PATH="$PWD/node_modules/.bin:$PATH" trunk build --release
 Deploy the static files generated in `crates/noita_web/dist/`.
 
 ## Thanks
+
 https://github.com/pudy248/noitaWandAtlas
+
 https://noita.wiki.gg/wiki/Technical:_Noita_PRNG
+
 https://noita.wiki.gg/wiki/Wand_Generation
+
 https://noita.wiki.gg/wiki/Great_Treasure_Chest

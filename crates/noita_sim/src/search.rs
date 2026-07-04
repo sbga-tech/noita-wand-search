@@ -29,7 +29,7 @@ pub struct SearchRequest {
 pub struct SearchProgress {
     pub x: f64,
     pub y: f64,
-    pub searched_pixels: u32,
+    pub searched_pixels: u64,
 }
 
 pub struct SearchState {
@@ -41,7 +41,7 @@ pub struct SearchState {
     y_step_mult: f64,
     x_step: f64,
     y_step: f64,
-    searched_pixels: u32,
+    searched_pixels: u64,
     last_x: f64,
     last_y: f64,
     mode: SearchMode,
@@ -55,7 +55,7 @@ pub enum SearchHit {
     Wand {
         x: f64,
         y: f64,
-        searched_pixels: u32,
+        searched_pixels: u64,
         wand: Wand,
     },
 }
@@ -64,11 +64,11 @@ pub enum SearchHit {
 struct SpiralCandidate {
     x: i32,
     y: i32,
-    searched_pixels: u32,
+    searched_pixels: u64,
 }
 
 struct SpiralCursor {
-    searched_pixels: u32,
+    searched_pixels: u64,
     last_x: f64,
     last_y: f64,
     x_off: f64,
@@ -255,7 +255,7 @@ impl SearchState {
         }
     }
 
-    fn check_candidate(&self, x: i32, y: i32, searched_pixels: u32) -> Option<SearchHit> {
+    fn check_candidate(&self, x: i32, y: i32, searched_pixels: u64) -> Option<SearchHit> {
         if matches!(self.mode, SearchMode::EoeWand) && x == 0 && y == 0 {
             return None;
         }
