@@ -1,58 +1,10 @@
 use crate::data::Material;
-use crate::potions::{create_potion, PotionKind};
+use crate::potion::{PotionGenerator, PotionKind};
 use crate::rng::NollaPrng;
-use crate::types::Wand;
-use crate::wandgen::{get_wand_unlocked, SaveFlags};
+use crate::types::{SaveFlags, Wand};
+use crate::wand::WandGenerator;
 
 use tinyvec::{tiny_vec, TinyVec};
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct WandSpawner {
-    pub cost: i32,
-    pub level: i32,
-    pub forced_nonshuffle: bool,
-    pub x_offset: f64,
-    pub y_offset: f64,
-}
-
-impl WandSpawner {
-    pub const fn new(cost: i32, level: i32, forced_nonshuffle: bool) -> Self {
-        Self {
-            cost,
-            level,
-            forced_nonshuffle,
-            x_offset: 0.0,
-            y_offset: 0.0,
-        }
-    }
-
-    pub const fn with_offset(mut self, x_offset: f64, y_offset: f64) -> Self {
-        self.x_offset = x_offset;
-        self.y_offset = y_offset;
-        self
-    }
-
-    pub const fn spell_level(self) -> i32 {
-        self.level
-    }
-
-    fn spawn_wand(
-        &self,
-        world_seed: u32,
-        coord: &SpawnCoord,
-        save_flags: Option<&SaveFlags>,
-    ) -> Wand {
-        get_wand_unlocked(
-            world_seed,
-            coord.x as f64 + self.x_offset,
-            coord.y as f64 + self.y_offset,
-            self.cost,
-            self.level,
-            self.forced_nonshuffle,
-            save_flags,
-        )
-    }
-}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Item {
@@ -67,13 +19,108 @@ pub struct SpawnCoord {
     pub y: i32,
 }
 
-enum ItemSpawner {
-    Wand(WandSpawner),
-    Potions(&'static [PotionKind]),
+macro_rules! bitflags {
+    (
+        $vis:vis struct $flags:ident($repr:ty) {
+            $($flag:ident = $value:expr),+ $(,)?
+        }
+    ) => {
+        #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+        $vis struct $flags($repr);
+
+        impl $flags {
+            $(
+                $vis const $flag: Self = Self($value);
+            )+
+            $vis const ALL: Self = Self(0 $(| Self::$flag.0)+);
+
+            fn contains(self, flag: Self) -> bool {
+                self.0 & flag.0 == flag.0
+            }
+
+            fn intersects(self, flag: Self) -> bool {
+                self.0 & flag.0 != 0
+            }
+        }
+    };
+}
+
+bitflags! {
+    pub(crate) struct ItemFlags(u8) {
+        WAND = 1u8 << 0,
+        MATERIAL = 1u8 << 1,
+        PLACEHOLDER = 1u8 << 2,
+    }
+}
+
+#[derive(Clone, Copy)]
+struct SpawnContext<'a> {
+    world_seed: u32,
+    coord: SpawnCoord,
+    save_flags: Option<&'a SaveFlags>,
+}
+
+trait GenerateItem {
+    fn item_flags(&self) -> ItemFlags;
+    fn next_item(&self, index: usize, context: SpawnContext<'_>) -> Option<Item>;
+}
+
+impl GenerateItem for WandGenerator {
+    fn item_flags(&self) -> ItemFlags {
+        ItemFlags::WAND
+    }
+
+    fn next_item(&self, index: usize, context: SpawnContext<'_>) -> Option<Item> {
+        (index == 0).then(|| {
+            Item::Wand(self.spawn_wand(
+                context.world_seed,
+                context.coord.x,
+                context.coord.y,
+                context.save_flags,
+            ))
+        })
+    }
+}
+
+impl GenerateItem for PotionGenerator {
+    fn item_flags(&self) -> ItemFlags {
+        ItemFlags::MATERIAL
+    }
+
+    fn next_item(&self, index: usize, context: SpawnContext<'_>) -> Option<Item> {
+        self.create_material(
+            index,
+            context.coord.x as f64,
+            context.coord.y as f64,
+            context.world_seed,
+        )
+        .map(Item::Material)
+    }
+}
+
+enum ItemGenerator {
+    Wand(WandGenerator),
+    Potions(PotionGenerator),
+}
+
+impl GenerateItem for ItemGenerator {
+    fn item_flags(&self) -> ItemFlags {
+        match self {
+            Self::Wand(generator) => generator.item_flags(),
+            Self::Potions(generator) => generator.item_flags(),
+        }
+    }
+
+    fn next_item(&self, index: usize, context: SpawnContext<'_>) -> Option<Item> {
+        match self {
+            Self::Wand(generator) => generator.next_item(index, context),
+            Self::Potions(generator) => generator.next_item(index, context),
+        }
+    }
 }
 
 enum LootNode {
-    Spawner(ItemSpawner),
+    Spawner(ItemGenerator),
     ItemPlaceholder(&'static str),
     Table(&'static LootTable),
     Reroll(u32),
@@ -110,7 +157,7 @@ impl Default for &'static LootTable {
 }
 
 impl LootTable {
-    fn roll(&self, random: &mut NollaPrng) -> &LootNode {
+    fn roll(&'static self, random: &mut NollaPrng) -> &'static LootNode {
         let roll = random.random_i32_inclusive(self.min_roll, self.max_roll);
         for entry in self.entries {
             if roll <= entry.threshold {
@@ -152,8 +199,8 @@ macro_rules! loot_table {
 macro_rules! loot_table_weight {
     ($table:expr) => {{
         const TABLE: LootTable = $table;
-        const _: () = assert!(wand_spawner_table_is_valid(TABLE));
-        wand_spawner_weights_from_table::<{ TABLE.entries.len() }>(TABLE)
+        const _: () = assert!(wand_generator_table_is_valid(TABLE));
+        wand_generator_weights_from_table::<{ TABLE.entries.len() }>(TABLE)
     }};
 }
 
@@ -175,13 +222,15 @@ const GREAT_CHEST_POTION_TABLE: LootTable = loot_table!({
     [
         {
             threshold: 30,
-            node: LootNode::Spawner(ItemSpawner::Potions(&POTION_STANDARD_STANDARD_SECRET)),
+            node: LootNode::Spawner(ItemGenerator::Potions(PotionGenerator::new(
+                &POTION_STANDARD_STANDARD_SECRET,
+            ))),
         },
         {
             threshold: 100,
-            node: LootNode::Spawner(ItemSpawner::Potions(
+            node: LootNode::Spawner(ItemGenerator::Potions(PotionGenerator::new(
                 &POTION_SECRET_SECRET_RANDOM_MATERIAL,
-            )),
+            ))),
         },
     ]
 });
@@ -209,35 +258,35 @@ const GREAT_CHEST_WAND_TABLE: LootTable = loot_table!({
     [
         {
             threshold: 25,
-            node: LootNode::Spawner(ItemSpawner::Wand(WandSpawner::new(80, 4, false))),
+            node: LootNode::Spawner(ItemGenerator::Wand(WandGenerator::new(80, 4, false))),
         },
         {
             threshold: 50,
-            node: LootNode::Spawner(ItemSpawner::Wand(WandSpawner::new(80, 4, true))),
+            node: LootNode::Spawner(ItemGenerator::Wand(WandGenerator::new(80, 4, true))),
         },
         {
             threshold: 75,
-            node: LootNode::Spawner(ItemSpawner::Wand(WandSpawner::new(100, 5, false))),
+            node: LootNode::Spawner(ItemGenerator::Wand(WandGenerator::new(100, 5, false))),
         },
         {
             threshold: 90,
-            node: LootNode::Spawner(ItemSpawner::Wand(WandSpawner::new(100, 5, true))),
+            node: LootNode::Spawner(ItemGenerator::Wand(WandGenerator::new(100, 5, true))),
         },
         {
             threshold: 96,
-            node: LootNode::Spawner(ItemSpawner::Wand(WandSpawner::new(120, 6, false))),
+            node: LootNode::Spawner(ItemGenerator::Wand(WandGenerator::new(120, 6, false))),
         },
         {
             threshold: 98,
-            node: LootNode::Spawner(ItemSpawner::Wand(WandSpawner::new(120, 6, true))),
+            node: LootNode::Spawner(ItemGenerator::Wand(WandGenerator::new(120, 6, true))),
         },
         {
             threshold: 99,
-            node: LootNode::Spawner(ItemSpawner::Wand(WandSpawner::new(120, 6, false))),
+            node: LootNode::Spawner(ItemGenerator::Wand(WandGenerator::new(120, 6, false))),
         },
         {
             threshold: 100,
-            node: LootNode::Spawner(ItemSpawner::Wand(WandSpawner::new(180, 11, true))),
+            node: LootNode::Spawner(ItemGenerator::Wand(WandGenerator::new(180, 11, true))),
         },
     ]
 });
@@ -322,7 +371,7 @@ pub const TAIKASAUVA_LOOT_TABLE: LootTable = loot_table!({
     [
         {
             threshold: 0,
-            node: LootNode::Spawner(ItemSpawner::Wand(WandSpawner::new(60, 3, false))),
+            node: LootNode::Spawner(ItemGenerator::Wand(WandGenerator::new(60, 3, false))),
         },
     ]
 });
@@ -333,8 +382,8 @@ pub const TINY_DROP_LOOT_TABLE: LootTable = loot_table!({
     [
         {
             threshold: 0,
-            node: LootNode::Spawner(ItemSpawner::Wand(
-                WandSpawner::new(180, 11, true).with_offset(16.0, 0.0),
+            node: LootNode::Spawner(ItemGenerator::Wand(
+                WandGenerator::new(180, 11, true).with_offset(16.0, 0.0),
             )),
         },
     ]
@@ -361,21 +410,21 @@ const fn loot_table_is_valid(table: LootTable) -> bool {
     true
 }
 
-const fn wand_spawner_from_node(node: &LootNode) -> Option<WandSpawner> {
+const fn wand_generator_from_node(node: &LootNode) -> Option<WandGenerator> {
     match node {
-        LootNode::Spawner(ItemSpawner::Wand(spawner)) => Some(*spawner),
+        LootNode::Spawner(ItemGenerator::Wand(generator)) => Some(*generator),
         _ => None,
     }
 }
 
-const fn wand_spawner_table_is_valid(table: LootTable) -> bool {
+const fn wand_generator_table_is_valid(table: LootTable) -> bool {
     if !loot_table_is_valid(table) {
         return false;
     }
     let entries = table.entries;
     let mut i = 0;
     while i < entries.len() {
-        if wand_spawner_from_node(&entries[i].node).is_none() {
+        if wand_generator_from_node(&entries[i].node).is_none() {
             return false;
         }
         i += 1;
@@ -383,32 +432,32 @@ const fn wand_spawner_table_is_valid(table: LootTable) -> bool {
     true
 }
 
-const fn wand_spawner_weights_from_table<const N: usize>(
+const fn wand_generator_weights_from_table<const N: usize>(
     table: LootTable,
-) -> [(WandSpawner, f64); N] {
+) -> [(WandGenerator, f64); N] {
     let entries = table.entries;
     let denominator = (table.max_roll - table.min_roll + 1) as f64;
-    let mut out = [(WandSpawner::new(0, 0, false), 0.0); N];
+    let mut out = [(WandGenerator::new(0, 0, false), 0.0); N];
     let mut previous_threshold = table.min_roll - 1;
     let mut i = 0;
     while i < N {
         let count = entries[i].threshold - previous_threshold;
-        let spawner = match wand_spawner_from_node(&entries[i].node) {
-            Some(spawner) => spawner,
-            None => WandSpawner::new(0, 0, false),
+        let generator = match wand_generator_from_node(&entries[i].node) {
+            Some(generator) => generator,
+            None => WandGenerator::new(0, 0, false),
         };
-        out[i] = (spawner, count as f64 / denominator);
+        out[i] = (generator, count as f64 / denominator);
         previous_threshold = entries[i].threshold;
         i += 1;
     }
     out
 }
 
-pub const GREAT_CHEST_WAND_SPAWNER_WEIGHTS: [(WandSpawner, f64);
+pub const GREAT_CHEST_WAND_GENERATOR_WEIGHTS: [(WandGenerator, f64);
     GREAT_CHEST_WAND_TABLE.entries.len()] = loot_table_weight!(GREAT_CHEST_WAND_TABLE);
 
-pub fn great_chest_wand_spawner_weights() -> &'static [(WandSpawner, f64)] {
-    &GREAT_CHEST_WAND_SPAWNER_WEIGHTS
+pub fn great_chest_wand_generator_weights() -> &'static [(WandGenerator, f64)] {
+    &GREAT_CHEST_WAND_GENERATOR_WEIGHTS
 }
 
 pub fn round_rng_pos(num: i32) -> i32 {
@@ -422,11 +471,10 @@ pub fn round_rng_pos(num: i32) -> i32 {
         num
     }
 }
-
 pub struct LootSpawner {
-    world_seed: u32,
-    table: &'static LootTable,
-    save_flags: Option<SaveFlags>,
+    pub(crate) world_seed: u32,
+    pub(crate) table: &'static LootTable,
+    pub(crate) save_flags: Option<SaveFlags>,
 }
 
 const INLINE_PENDING_TABLES: usize = 8;
@@ -469,7 +517,9 @@ pub struct LootIter<'a> {
     save_flags: Option<&'a SaveFlags>,
     random: NollaPrng,
     pending_tables: TinyVec<[(&'static LootTable, u32); INLINE_PENDING_TABLES]>,
-    pending_potions: Option<core::slice::Iter<'static, PotionKind>>,
+    active_generator: Option<&'static ItemGenerator>,
+    active_generator_index: usize,
+    item_flags: ItemFlags,
 }
 
 impl<'a> LootIter<'a> {
@@ -478,6 +528,7 @@ impl<'a> LootIter<'a> {
         table: &'static LootTable,
         save_flags: Option<&'a SaveFlags>,
         coord: SpawnCoord,
+        item_flags: ItemFlags,
     ) -> Self {
         let random = loot_random(world_seed, table, coord);
 
@@ -487,7 +538,9 @@ impl<'a> LootIter<'a> {
             save_flags,
             random,
             pending_tables: tiny_vec!([(&'static LootTable, u32); INLINE_PENDING_TABLES] => (table, 1)),
-            pending_potions: None,
+            active_generator: None,
+            active_generator_index: 0,
+            item_flags,
         }
     }
 }
@@ -496,32 +549,37 @@ impl Iterator for LootIter<'_> {
     type Item = Item;
 
     fn next(&mut self) -> Option<Self::Item> {
+        let context = SpawnContext {
+            world_seed: self.world_seed,
+            coord: self.coord,
+            save_flags: self.save_flags,
+        };
         loop {
-            if let Some(kinds) = &mut self.pending_potions {
-                if let Some(kind) = kinds.next() {
-                    return Some(Item::Material(create_potion(
-                        self.coord.x as f64,
-                        self.coord.y as f64,
-                        self.world_seed,
-                        *kind,
-                    )));
+            if let Some(generator) = self.active_generator {
+                if let Some(item) = generator.next_item(self.active_generator_index, context) {
+                    self.active_generator_index += 1;
+                    return Some(item);
                 }
-                self.pending_potions = None;
+                self.active_generator = None;
+                self.active_generator_index = 0;
             }
 
             let table = pop_pending_table(&mut self.pending_tables)?;
             match table.roll(&mut self.random) {
-                LootNode::Spawner(ItemSpawner::Wand(spawner)) => {
-                    return Some(Item::Wand(spawner.spawn_wand(
-                        self.world_seed,
-                        &self.coord,
-                        self.save_flags,
-                    )));
+                LootNode::Spawner(spawner) => {
+                    if self.item_flags.intersects(spawner.item_flags()) {
+                        if let Some(item) = spawner.next_item(0, context) {
+                            self.active_generator = Some(spawner);
+                            self.active_generator_index = 1;
+                            return Some(item);
+                        }
+                    }
                 }
-                LootNode::Spawner(ItemSpawner::Potions(kinds)) => {
-                    self.pending_potions = Some(kinds.iter());
+                LootNode::ItemPlaceholder(name) => {
+                    if self.item_flags.contains(ItemFlags::PLACEHOLDER) {
+                        return Some(Item::Placeholder(name));
+                    }
                 }
-                LootNode::ItemPlaceholder(name) => return Some(Item::Placeholder(name)),
                 LootNode::Table(nested) => push_pending_table(&mut self.pending_tables, nested, 1),
                 LootNode::Reroll(times) => {
                     push_pending_table(&mut self.pending_tables, table, *times)
@@ -529,6 +587,32 @@ impl Iterator for LootIter<'_> {
             }
         }
     }
+}
+
+pub fn find_wand_sprite(
+    world_seed: u32,
+    table: &'static LootTable,
+    save_flags: Option<&SaveFlags>,
+    coord: SpawnCoord,
+    target: &Wand,
+) -> Option<usize> {
+    let mut random = loot_random(world_seed, table, coord);
+    let mut pending_tables =
+        tiny_vec!([(&'static LootTable, u32); INLINE_PENDING_TABLES] => (table, 1));
+    while let Some(table) = pop_pending_table(&mut pending_tables) {
+        match table.roll(&mut random) {
+            LootNode::Spawner(ItemGenerator::Wand(generator)) => {
+                let wand = generator.spawn_wand(world_seed, coord.x, coord.y, save_flags);
+                if &wand == target {
+                    return Some(generator.wand_sprite(world_seed, coord.x, coord.y));
+                }
+            }
+            LootNode::Spawner(ItemGenerator::Potions(_)) | LootNode::ItemPlaceholder(_) => {}
+            LootNode::Table(nested) => push_pending_table(&mut pending_tables, nested, 1),
+            LootNode::Reroll(times) => push_pending_table(&mut pending_tables, table, *times),
+        }
+    }
+    None
 }
 
 impl LootSpawner {
@@ -545,10 +629,107 @@ impl LootSpawner {
     }
 
     pub fn iter(&self, coord: SpawnCoord) -> LootIter<'_> {
-        LootIter::new(self.world_seed, self.table, self.save_flags.as_ref(), coord)
+        self.iter_with_flags(coord, ItemFlags::ALL)
+    }
+
+    pub(crate) fn iter_with_flags(&self, coord: SpawnCoord, item_flags: ItemFlags) -> LootIter<'_> {
+        LootIter::new(
+            self.world_seed,
+            self.table,
+            self.save_flags.as_ref(),
+            coord,
+            item_flags,
+        )
     }
 
     pub fn spawn(&self, coord: SpawnCoord) -> Vec<Item> {
         self.iter(coord).collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_coords() -> impl Iterator<Item = SpawnCoord> {
+        (0..256).map(|index| SpawnCoord {
+            x: index * 37 - 2_000,
+            y: index * 53 + 10,
+        })
+    }
+
+    #[test]
+    fn generated_wand_sprite_can_be_recovered_lazily() {
+        let spawner = LootSpawner::new(123_456, &GREAT_CHEST_LOOT_TABLE, None);
+        let mut saw_wand = false;
+
+        for coord in sample_coords() {
+            for item in spawner.iter_with_flags(coord, ItemFlags::WAND) {
+                if let Item::Wand(wand) = item {
+                    let sprite = find_wand_sprite(
+                        spawner.world_seed,
+                        spawner.table,
+                        spawner.save_flags.as_ref(),
+                        coord,
+                        &wand,
+                    );
+                    assert!(sprite.is_some(), "generated wand should recover a sprite");
+                    saw_wand = true;
+                }
+            }
+        }
+
+        assert!(
+            saw_wand,
+            "sample coordinates should include at least one wand"
+        );
+    }
+
+    #[test]
+    fn pruned_wand_projection_matches_full_iterator() {
+        let spawner = LootSpawner::new(123_456, &GREAT_CHEST_LOOT_TABLE, None);
+        let mut saw_wand = false;
+
+        for coord in sample_coords() {
+            let from_iter = spawner.iter(coord).find_map(|item| match item {
+                Item::Wand(wand) => Some(wand),
+                Item::Material(_) | Item::Placeholder(_) => None,
+            });
+            let from_pruned = spawner
+                .iter_with_flags(coord, ItemFlags::WAND)
+                .find_map(|item| match item {
+                    Item::Wand(wand) => Some(wand),
+                    Item::Material(_) | Item::Placeholder(_) => {
+                        panic!("wand-only projection yielded a non-wand item")
+                    }
+                });
+
+            saw_wand |= from_iter.is_some();
+            assert_eq!(from_pruned, from_iter);
+        }
+
+        assert!(
+            saw_wand,
+            "sample coordinates should include at least one wand"
+        );
+    }
+
+    #[test]
+    fn all_candidate_projection_matches_public_iterator() {
+        let spawner = LootSpawner::new(123_456, &GREAT_CHEST_LOOT_TABLE, None);
+        let mut saw_material = false;
+
+        for coord in sample_coords() {
+            let from_find_map = spawner.iter_with_flags(coord, ItemFlags::ALL).next();
+            let from_iter = spawner.iter(coord).next();
+
+            saw_material |= matches!(from_iter, Some(Item::Material(_)));
+            assert_eq!(from_find_map, from_iter);
+        }
+
+        assert!(
+            saw_material,
+            "sample coordinates should cover material item branches"
+        );
     }
 }

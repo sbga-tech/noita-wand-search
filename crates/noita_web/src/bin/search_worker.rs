@@ -6,10 +6,10 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::{spawn_local, JsFuture};
 use web_sys::{DedicatedWorkerGlobalScope, MessageEvent};
 
-const SEARCH_PROGRESS_CANDIDATES: u32 = 1 << 18;
-const SEARCH_CANDIDATES_PER_THREAD: u32 = 8_192;
-const MIN_SEARCH_BATCH_CANDIDATES: u32 = 1 << 14;
-const MAX_SEARCH_BATCH_CANDIDATES: u32 = 1 << 16;
+const SEARCH_PROGRESS_CANDIDATES: u32 = 1 << 21;
+const SEARCH_CANDIDATES_PER_THREAD: u32 = 1 << 17;
+const MIN_SEARCH_BATCH_CANDIDATES: u32 = 1 << 18;
+const MAX_SEARCH_BATCH_CANDIDATES: u32 = 1 << 20;
 
 fn hardware_concurrency() -> usize {
     let global = js_sys::global();
@@ -29,9 +29,9 @@ fn search_batch_candidates(thread_count: usize) -> u32 {
         .clamp(MIN_SEARCH_BATCH_CANDIDATES, MAX_SEARCH_BATCH_CANDIDATES)
 }
 
-fn pixels_per_second(searched_pixels: u32, started_at_ms: f64, now_ms: f64) -> f64 {
-    let elapsed_secs = ((now_ms - started_at_ms) / 1_000.0).max(0.001);
-    searched_pixels as f64 / elapsed_secs
+fn pixels_per_second(searched_pixels_delta: u64, elapsed_ms: f64) -> f64 {
+    let elapsed_secs = (elapsed_ms / 1_000.0).max(0.001);
+    searched_pixels_delta as f64 / elapsed_secs
 }
 
 fn post_event(scope: &DedicatedWorkerGlobalScope, event: SearchWorkerEvent) {
@@ -55,16 +55,18 @@ fn post_event(scope: &DedicatedWorkerGlobalScope, event: SearchWorkerEvent) {
 
 fn run_search(scope: &DedicatedWorkerGlobalScope, start: SearchWorkerStart, thread_count: usize) {
     let worker_batch_size = search_batch_candidates(thread_count);
+    let batch = u64::from(worker_batch_size);
     let mut state = SearchState::new(start.request);
     let started_at_ms = js_sys::Date::now();
-    let mut searched_since_progress = 0;
+    let mut searched_total: u64 = 0;
+    let mut searched_since_progress: u64 = 0;
 
     loop {
         if let Some(hit) = state.step(worker_batch_size) {
             let now_ms = js_sys::Date::now();
             let progress = state.progress();
             let pixels_per_second =
-                pixels_per_second(progress.searched_pixels, started_at_ms, now_ms);
+                pixels_per_second(searched_total + batch, now_ms - started_at_ms);
             post_event(
                 scope,
                 SearchWorkerEvent::Hit {
@@ -77,17 +79,16 @@ fn run_search(scope: &DedicatedWorkerGlobalScope, start: SearchWorkerStart, thre
             return;
         }
 
-        searched_since_progress += worker_batch_size;
-        if searched_since_progress >= SEARCH_PROGRESS_CANDIDATES {
+        searched_total += batch;
+        searched_since_progress += batch;
+        if searched_since_progress >= u64::from(SEARCH_PROGRESS_CANDIDATES) {
             let now_ms = js_sys::Date::now();
-            let progress = state.progress();
-            let pixels_per_second =
-                pixels_per_second(progress.searched_pixels, started_at_ms, now_ms);
+            let pixels_per_second = pixels_per_second(searched_total, now_ms - started_at_ms);
             post_event(
                 scope,
                 SearchWorkerEvent::Progress {
                     token_id: start.token_id,
-                    progress,
+                    progress: state.progress(),
                     pixels_per_second,
                 },
             );

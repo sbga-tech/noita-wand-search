@@ -1,6 +1,10 @@
 use leptos::prelude::*;
 use noita_sim::data::{Spell, WAND_SPRITES};
-use noita_sim::search::{SearchHit, SearchMode};
+use noita_sim::loot::{
+    find_wand_sprite, SpawnCoord, GREAT_CHEST_LOOT_TABLE, TAIKASAUVA_LOOT_TABLE,
+    TINY_DROP_LOOT_TABLE,
+};
+use noita_sim::search::{SearchHit, SearchMode, SearchRequest};
 use noita_sim::types::Wand;
 use noita_sim::ActionType;
 
@@ -19,11 +23,35 @@ pub fn uncertainty_suffix(mode: SearchMode, x: f64, y: f64) -> &'static str {
 }
 
 /// Human-readable wand sprite/staff name for the card heading.
-fn wand_name(wand: &Wand) -> &'static str {
+fn wand_name(sprite: usize) -> &'static str {
     WAND_SPRITES
-        .get(wand.sprite)
+        .get(sprite)
         .map(|sprite| sprite.name)
         .unwrap_or("Wand")
+}
+
+fn sprite_for_hit(request: &SearchRequest, x: f64, y: f64, wand: &Wand) -> Option<usize> {
+    let table = match request.mode {
+        SearchMode::EoeWand => &GREAT_CHEST_LOOT_TABLE,
+        SearchMode::TaikasauvaWand => &TAIKASAUVA_LOOT_TABLE,
+        SearchMode::TinyDropWand => &TINY_DROP_LOOT_TABLE,
+    };
+    let save_flags = match (request.mode, request.unlock_flags.clone()) {
+        (SearchMode::EoeWand, Some(flags)) => Some(noita_sim::SaveFlags::new(flags)),
+        (SearchMode::EoeWand, None) => Some(noita_sim::SaveFlags::new(Vec::new())),
+        (_, Some(flags)) => Some(noita_sim::SaveFlags::new(flags)),
+        (_, None) => None,
+    };
+    find_wand_sprite(
+        request.seed.wrapping_add(request.ng),
+        table,
+        save_flags.as_ref(),
+        SpawnCoord {
+            x: x as i32,
+            y: y as i32,
+        },
+        wand,
+    )
 }
 
 /// Inventory frame (`ui_gfx/inventory/item_bg_*`) overlaid on a spell icon,
@@ -107,7 +135,7 @@ fn AlwaysCastRow(spell: Spell) -> impl IntoView {
 
 /// A wand rendered as a Noita-style card matching the game/wiki layout.
 #[component]
-fn WandCard(wand: Wand) -> impl IntoView {
+fn WandCard(wand: Wand, sprite: usize) -> impl IntoView {
     let has_always_cast = wand.always_cast != Spell::None;
 
     // Grid areas: the sprite spans the name row plus every stat row so it sits
@@ -125,13 +153,13 @@ fn WandCard(wand: Wand) -> impl IntoView {
         .map(|i| wand.spells.get(i).copied().unwrap_or(Spell::None))
         .collect::<Vec<_>>();
 
-    let name = wand_name(&wand).to_uppercase();
+    let name = wand_name(sprite).to_uppercase();
 
     view! {
         <div class="wand-card" style=format!("grid-template-areas: {areas};")>
             <p class="wand-name">{name.clone()}</p>
             <div class="wand-sprite">
-                <img src=format!("public/assets/wands/wand_{:04}.png", wand.sprite) alt=name />
+                <img src=format!("public/assets/wands/wand_{sprite:04}.png") alt=name />
             </div>
             <StatRow icon="icon_gun_shuffle" label="Shuffle" value=if wand.shuffle { "Yes" } else { "No" } />
             <StatRow icon="icon_gun_actions_per_round" label="Spells/Cast" value=wand.multicast.to_string() />
@@ -156,13 +184,17 @@ fn WandCard(wand: Wand) -> impl IntoView {
 
 /// A found-wand result: title, coordinates, and the wand card.
 #[component]
-fn WandHit(mode: SearchMode, hit: SearchHit) -> impl IntoView {
+fn WandHit(mode: SearchMode, request: Option<SearchRequest>, hit: SearchHit) -> impl IntoView {
     let SearchHit::Wand { x, y, wand, .. } = hit;
+    let sprite = request
+        .as_ref()
+        .and_then(|request| sprite_for_hit(request, x, y, &wand))
+        .unwrap_or(0);
     let suffix = uncertainty_suffix(mode, x, y);
     view! {
         <div class="mb-1 font-display text-xl uppercase tracking-widest text-gold-bright">"Wand found"</div>
         <div class="mb-3 tabular-nums text-parchment">{format!("x = {x}{suffix} · y = {y}{suffix}")}</div>
-        <WandCard wand />
+        <WandCard wand sprite />
     }
 }
 
@@ -172,13 +204,14 @@ pub fn ResultsPanel(
     error: ReadSignal<String>,
     result: ReadSignal<Option<SearchHit>>,
     mode: ReadSignal<SearchMode>,
+    request: ReadSignal<Option<SearchRequest>>,
 ) -> impl IntoView {
     let body = move || {
         let error = error.get();
         if !error.is_empty() {
             view! { <div class="border-2 border-blood bg-[rgba(194,55,29,0.15)] p-4 text-center text-[#ffb3a6]">{error}</div> }.into_any()
         } else if let Some(hit) = result.get() {
-            view! { <WandHit mode=mode.get() hit /> }.into_any()
+            view! { <WandHit mode=mode.get() request=request.get() hit /> }.into_any()
         } else {
             view! {
                 <div class="border-2 border-dashed border-bronze p-4 text-center text-parchment-dim">"Complete a search to reveal the wand info."</div>
@@ -213,7 +246,6 @@ mod tests {
             spread: -3,
             shuffle: false,
             always_cast: Spell::Homing,
-            sprite: 821,
             spells: [Spell::ManaReduce, Spell::CircleshotA]
                 .into_iter()
                 .collect(),
@@ -243,8 +275,7 @@ mod tests {
 
     #[test]
     fn wand_name_resolves_sprite() {
-        let wand = sample_wand();
-        assert_eq!(wand_name(&wand), WAND_SPRITES[821].name);
+        assert_eq!(wand_name(821), WAND_SPRITES[821].name);
     }
 
     #[test]

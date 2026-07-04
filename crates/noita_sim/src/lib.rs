@@ -1,13 +1,14 @@
 pub mod data;
 pub mod filters;
 pub mod loot;
-pub mod potions;
+pub mod potion;
+#[cfg(feature = "profiling")]
+pub mod profiling;
 pub mod rng;
 pub mod search;
 pub mod types;
 pub mod validator;
-pub mod wandgen;
+pub mod wand;
 
 pub use data::{ActionType, Material, Spell};
-pub use types::WandStat;
-pub use wandgen::SaveFlags;
+pub use types::{SaveFlags, WandStat};

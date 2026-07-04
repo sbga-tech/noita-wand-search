@@ -23,8 +23,32 @@ thread_local! {
     static ACTIVE_SEARCH_WORKER: RefCell<Option<ActiveSearchWorker>> = const { RefCell::new(None) };
 }
 
+pub fn compact_number(value: f64) -> String {
+    const UNITS: &[(f64, &str)] = &[
+        (1_000_000_000_000.0, "T"),
+        (1_000_000_000.0, "B"),
+        (1_000_000.0, "M"),
+        (1_000.0, "K"),
+    ];
+    let magnitude = value.abs();
+    for (threshold, suffix) in UNITS {
+        if magnitude >= *threshold {
+            return format!("{:.3}{suffix}", value / threshold);
+        }
+    }
+    if value.fract() == 0.0 {
+        format!("{value:.0}")
+    } else {
+        format!("{value:.3}")
+    }
+}
+
 fn format_search_status(searched_pixels: u32, pixels_per_second: f64) -> String {
-    format!("{searched_pixels} pixels checked · {pixels_per_second:.2} px/s")
+    format!(
+        "{} px {} px/s",
+        compact_number(searched_pixels as f64),
+        compact_number(pixels_per_second)
+    )
 }
 
 pub fn cancel_active_search_worker() {
@@ -47,6 +71,7 @@ pub fn spawn_client_search(
     status: WriteSignal<String>,
     result: WriteSignal<Option<SearchHit>>,
     progress: WriteSignal<SearchProgress>,
+    search_speed: WriteSignal<f64>,
     searching: WriteSignal<bool>,
 ) {
     cancel_active_search_worker();
@@ -55,6 +80,7 @@ pub fn spawn_client_search(
         Ok(message) => message,
         Err(error) => {
             status.set(format!("Failed to encode search request: {error}"));
+            search_speed.set(0.0);
             searching.set(false);
             return;
         }
@@ -67,6 +93,7 @@ pub fn spawn_client_search(
         Err(error) => {
             status.set(format!("Failed to start search worker: {error:?}"));
             searching.set(false);
+            search_speed.set(0.0);
             return;
         }
     };
@@ -88,6 +115,7 @@ pub fn spawn_client_search(
                             "Failed to post search request to worker: {error:?}"
                         ));
                         searching.set(false);
+                        search_speed.set(0.0);
                         clear_active_search_worker(token_id, active_token);
                     }
                 }
@@ -100,6 +128,7 @@ pub fn spawn_client_search(
                         current.searched_pixels,
                         pixels_per_second,
                     ));
+                    search_speed.set(pixels_per_second);
                     progress.set(current);
                 }
                 Ok(SearchWorkerEvent::Hit {
@@ -112,6 +141,7 @@ pub fn spawn_client_search(
                         current.searched_pixels,
                         pixels_per_second,
                     ));
+                    search_speed.set(pixels_per_second);
                     progress.set(current);
                     result.set(Some(hit));
                     searching.set(false);
@@ -123,6 +153,7 @@ pub fn spawn_client_search(
                 }) if event_token.is_none() || event_token == Some(token_id) => {
                     status.set(format!("Search worker error: {message}"));
                     searching.set(false);
+                    search_speed.set(0.0);
                     clear_active_search_worker(token_id, active_token);
                 }
                 Ok(_) => {}
@@ -166,11 +197,20 @@ mod tests {
     use noita_sim::WandStat;
 
     #[test]
-    fn search_status_includes_pixels_per_second() {
+    fn search_status_compacts_pixels_and_speed() {
         assert_eq!(
             format_search_status(12_345, 6_172.5),
-            "12345 pixels checked · 6172.50 px/s"
+            "12.345K px 6.173K px/s"
         );
+    }
+
+    #[test]
+    fn compact_number_uses_metric_suffixes() {
+        assert_eq!(compact_number(999.0), "999");
+        assert_eq!(compact_number(1_000.0), "1.000K");
+        assert_eq!(compact_number(1_234_567.0), "1.235M");
+        assert_eq!(compact_number(1_234_567_890.0), "1.235B");
+        assert_eq!(compact_number(1_234_567_890_123.0), "1.235T");
     }
     #[test]
     fn default_query_matches_current_defaults() {

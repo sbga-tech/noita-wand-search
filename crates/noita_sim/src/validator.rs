@@ -1,6 +1,6 @@
 use crate::data::{ActionType, Spell, SPELL_PROBS_TYPES};
 use crate::filters::{Comparison, FilterMode, WandFilter, WandFilterKind, WandFilterSet};
-use crate::loot::great_chest_wand_spawner_weights;
+use crate::loot::great_chest_wand_generator_weights;
 use crate::search::{SearchMode, SearchRequest};
 use crate::types::WandStat;
 use std::collections::HashSet;
@@ -221,8 +221,8 @@ fn mode_can_shuffle(mode: SearchMode) -> (bool, bool) {
 fn for_each_wand_spell_level(mode: SearchMode, mut visit: impl FnMut(i32)) {
     match mode {
         SearchMode::EoeWand => {
-            for (spawner, _) in great_chest_wand_spawner_weights() {
-                visit(spawner.spell_level());
+            for (generator, _) in great_chest_wand_generator_weights() {
+                visit(generator.spell_level());
             }
         }
         SearchMode::TaikasauvaWand => visit(3),

@@ -48,3 +48,25 @@ pub fn create_potion(x: f64, y: f64, seed: u32, kind: PotionKind) -> Material {
         }
     }
 }
+
+#[derive(Clone, Copy)]
+pub(crate) struct PotionGenerator {
+    kinds: &'static [PotionKind],
+}
+
+impl PotionGenerator {
+    pub(crate) const fn new(kinds: &'static [PotionKind]) -> Self {
+        Self { kinds }
+    }
+
+    pub(crate) fn create_material(
+        &self,
+        index: usize,
+        x: f64,
+        y: f64,
+        seed: u32,
+    ) -> Option<Material> {
+        let kind = *self.kinds.get(index)?;
+        Some(create_potion(x, y, seed, kind))
+    }
+}

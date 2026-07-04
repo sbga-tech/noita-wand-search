@@ -2,7 +2,7 @@ use noita_sim::filters::{WandFilter, WandFilterSet};
 use noita_sim::loot::{Item, LootSpawner, SpawnCoord, GREAT_CHEST_LOOT_TABLE};
 use noita_sim::search::{SearchHit, SearchMode, SearchRequest, SearchState};
 use noita_sim::types::Wand;
-use noita_sim::wandgen::get_wand_unlocked;
+use noita_sim::wand::get_wand_unlocked;
 use noita_sim::{SaveFlags, Spell};
 
 const REPORTED_UNLOCK_FLAGS: &[&str] = &[

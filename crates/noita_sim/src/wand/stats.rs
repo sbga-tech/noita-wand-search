@@ -1,6 +1,4 @@
-use crate::data::{
-    ActionType, Spell, SpellProb, SPELL_PROBS_COUNTS, SPELL_PROBS_TYPES, WAND_SPRITES,
-};
+use crate::data::Spell;
 use crate::rng::NollaPrng;
 use crate::types::{Wand, WandSpells};
 
@@ -39,22 +37,21 @@ enum InternalStat {
     Shuffle,
 }
 
-struct InternalWandInst {
-    cost: f32,
-    force_unshuffle: bool,
-    is_rare: bool,
-    sprite: usize,
-    capacity: f32,
-    multicast: i32,
-    mana: i32,
-    regen: i32,
-    delay: i32,
-    reload: i32,
-    speed: f32,
-    spread: i32,
-    shuffle: bool,
-    always_cast: Spell,
-    spells: WandSpells,
+pub(in crate::wand) struct InternalWandInst {
+    pub(in crate::wand) cost: f32,
+    pub(in crate::wand) force_unshuffle: bool,
+    pub(in crate::wand) is_rare: bool,
+    pub(in crate::wand) capacity: f32,
+    pub(in crate::wand) multicast: i32,
+    pub(in crate::wand) mana: i32,
+    pub(in crate::wand) regen: i32,
+    pub(in crate::wand) delay: i32,
+    pub(in crate::wand) reload: i32,
+    pub(in crate::wand) speed: f32,
+    pub(in crate::wand) spread: i32,
+    pub(in crate::wand) shuffle: bool,
+    pub(in crate::wand) always_cast: Spell,
+    pub(in crate::wand) spells: WandSpells,
 }
 
 impl InternalWandInst {
@@ -63,7 +60,6 @@ impl InternalWandInst {
             cost: 0.0,
             force_unshuffle: false,
             is_rare: false,
-            sprite: 0,
             capacity: 0.0,
             multicast: 0,
             mana: 0,
@@ -78,7 +74,7 @@ impl InternalWandInst {
         }
     }
 
-    fn into_public(self) -> Wand {
+    pub(in crate::wand) fn into_public(self) -> Wand {
         Wand {
             capacity: self.capacity.floor() as i32,
             multicast: self.multicast,
@@ -90,7 +86,6 @@ impl InternalWandInst {
             spread: self.spread,
             shuffle: self.shuffle,
             always_cast: self.always_cast,
-            sprite: self.sprite,
             spells: self.spells,
         }
     }
@@ -188,116 +183,6 @@ const MULTICAST_PROB: ProbTable = prob_table!(int [
     (0.05, { min: 1, max: 5, mean: 2, sharpness: 2.0 }),
     (1.0, { min: 1, max: 5, mean: 2, sharpness: 0.0 }),
 ]);
-
-#[derive(Clone, Debug)]
-pub struct SaveFlags {
-    flags: Vec<String>,
-}
-
-impl SaveFlags {
-    pub fn new(flags: Vec<String>) -> Self {
-        Self { flags }
-    }
-
-    pub fn is_spell_unlocked(&self, spell: Spell) -> bool {
-        match spell.unlock_flag() {
-            None => true,
-            Some(flag) => self.flags.iter().any(|candidate| candidate == flag),
-        }
-    }
-}
-
-fn get_random_from_probs(probs: &[SpellProb], random: &mut NollaPrng, add_epsilon: bool) -> Spell {
-    if probs.is_empty() {
-        return Spell::None;
-    }
-    let sum = probs.last().unwrap().p;
-    let cutoff = random.next_f64() * sum + if add_epsilon { 0.0001 } else { 0.0 };
-    let mut low = 0usize;
-    let mut high = probs.len();
-    while low < high {
-        let mid = low + (high - low) / 2;
-        if probs[mid].p < cutoff {
-            low = mid + 1;
-        } else {
-            high = mid;
-        }
-    }
-    probs[low.min(probs.len() - 1)].spell
-}
-
-fn get_random_from_probs_unlocked(
-    probs: &[SpellProb],
-    random: &mut NollaPrng,
-    add_epsilon: bool,
-    save_flags: &SaveFlags,
-) -> Spell {
-    let mut total = 0.0;
-    let mut previous = 0.0;
-    for prob in probs {
-        let weight = prob.p - previous;
-        previous = prob.p;
-        if save_flags.is_spell_unlocked(prob.spell) {
-            total += weight;
-        }
-    }
-    if total <= 0.0 {
-        return Spell::None;
-    }
-    let mut cutoff = random.next_f64() * total + if add_epsilon { 0.0001 } else { 0.0 };
-    previous = 0.0;
-    for prob in probs {
-        let weight = prob.p - previous;
-        previous = prob.p;
-        if save_flags.is_spell_unlocked(prob.spell) {
-            if cutoff <= weight {
-                return prob.spell;
-            }
-            cutoff -= weight;
-        }
-    }
-    Spell::None
-}
-
-fn choose_random_spell_from_probs(
-    seed: u32,
-    x: f64,
-    y: f64,
-    offset: i32,
-    probs: &[SpellProb],
-    save_flags: Option<&SaveFlags>,
-) -> Spell {
-    let mut random = NollaPrng::new(seed.wrapping_add(offset as u32));
-    random.set_random_seed(x, y);
-    match save_flags {
-        Some(save_flags) => get_random_from_probs_unlocked(probs, &mut random, true, save_flags),
-        None => get_random_from_probs(probs, &mut random, true),
-    }
-}
-
-fn get_random_action_with_type(
-    seed: u32,
-    x: f64,
-    y: f64,
-    level: i32,
-    action_type: ActionType,
-    offset: i32,
-    save_flags: Option<&SaveFlags>,
-) -> Spell {
-    let level = level.clamp(0, 10) as usize;
-    let action_type = usize::from(u8::from(action_type));
-    if SPELL_PROBS_COUNTS[level][action_type] == 0 {
-        return Spell::None;
-    }
-    choose_random_spell_from_probs(
-        seed,
-        x,
-        y,
-        offset,
-        SPELL_PROBS_TYPES[level][action_type],
-        save_flags,
-    )
-}
 
 impl ProbTable {
     fn roll_distribution(&self, random: &mut NollaPrng) -> ProbDistribution {
@@ -425,7 +310,7 @@ fn apply_random_variable(gun: &mut InternalWandInst, s: InternalStat, random: &m
     }
 }
 
-fn get_wand_stats(
+pub(in crate::wand) fn get_wand_stats(
     cost: i32,
     level: i32,
     force_unshuffle: bool,
@@ -518,267 +403,4 @@ fn get_wand_stats(
     }
     gun.multicast = gun.multicast.clamp(1, gun.capacity as i32);
     gun
-}
-
-fn get_best_sprite(random: &mut NollaPrng, w: &mut InternalWandInst) {
-    let fire_rate_wait = (((w.delay + 5) as f32 / 7.0) - 1.0).clamp(0.0, 4.0);
-    let actions_per_round = (w.multicast - 1).clamp(0, 2) as f32;
-    let deck_capacity = ((w.capacity - 3.0) / 3.0).clamp(0.0, 7.0);
-    let spread_degrees = (((w.spread + 5) as f32 / 5.0) - 1.0).clamp(0.0, 2.0);
-    let reload_time = (((w.reload + 5) as f32 / 25.0) - 1.0).clamp(0.0, 2.0);
-    let mut best_score = 1000.0_f32;
-    for (i, sprite) in WAND_SPRITES.iter().enumerate() {
-        let mut score = 0.0;
-        score += (fire_rate_wait - sprite.fire_rate_wait as f32).abs() * 2.0;
-        score += (actions_per_round - sprite.actions_per_round as f32).abs() * 20.0;
-        score += ((w.shuffle as i32 - sprite.shuffle_deck_when_empty as i32).abs() as f32) * 30.0;
-        score += (deck_capacity - sprite.deck_capacity as f32).abs() * 5.0;
-        score += (spread_degrees - sprite.spread_degrees as f32).abs();
-        score += (reload_time - sprite.reload_time as f32).abs();
-        if score <= best_score {
-            best_score = score;
-            w.sprite = i;
-            if score == 0.0 && random.random_i32_inclusive(0, 100) < 33 {
-                break;
-            }
-        }
-    }
-}
-
-fn consume_discarded_card_rolls(random: &mut NollaPrng, is_rare: bool) {
-    if random.random_i32_inclusive(0, 100) < 7 {
-        let _ = random.random_i32_inclusive(20, 50);
-    }
-
-    let discarded_card_count = random.random_i32_inclusive(1, 3);
-    let _ = random.random_i32_inclusive(0, 100) < 50 && discarded_card_count < 3;
-    if random.random_i32_inclusive(0, 100) < 10 || is_rare {
-        let _ = random.random_i32_inclusive(1, 2);
-    }
-}
-
-fn add_random_cards(
-    gun: &mut InternalWandInst,
-    seed: u32,
-    x: f64,
-    y: f64,
-    level_raw: i32,
-    random: &mut NollaPrng,
-    save_flags: Option<&SaveFlags>,
-) {
-    let is_rare = gun.is_rare;
-    consume_discarded_card_rolls(random, is_rare);
-    let orig_level = level_raw;
-    let level = level_raw - 1;
-    let capacity = gun.capacity;
-    let multicast = gun.multicast;
-    let mut bullet_card =
-        get_random_action_with_type(seed, x, y, level, ActionType::Projectile, 0, save_flags);
-    let mut card;
-    let mut random_bullets = 0;
-    let mut good_card_count = 0;
-    let good_cards = random.random_i32_inclusive(5, 45);
-    let mut card_count = random
-        .random_f32(0.51 * capacity, capacity)
-        .floor()
-        .clamp(1.0, (capacity - 1.0).floor()) as i32;
-    if random.random_i32_inclusive(0, 100) < orig_level * 10 - 5 {
-        random_bullets = 1;
-    }
-    if random.random_i32_inclusive(0, 100) < 4 || is_rare {
-        let p = random.random_i32_inclusive(0, 100);
-        if p < 77 {
-            card = get_random_action_with_type(
-                seed,
-                x,
-                y,
-                level + 1,
-                ActionType::Modifier,
-                666,
-                save_flags,
-            );
-        } else if p < 85 {
-            card = get_random_action_with_type(
-                seed,
-                x,
-                y,
-                level + 1,
-                ActionType::Modifier,
-                666,
-                save_flags,
-            );
-            good_card_count += 1;
-        } else if p < 93 {
-            card = get_random_action_with_type(
-                seed,
-                x,
-                y,
-                level + 1,
-                ActionType::StaticProjectile,
-                666,
-                save_flags,
-            );
-        } else {
-            card = get_random_action_with_type(
-                seed,
-                x,
-                y,
-                level + 1,
-                ActionType::Projectile,
-                666,
-                save_flags,
-            );
-        }
-        gun.always_cast = card;
-    } else {
-        gun.always_cast = Spell::None;
-    }
-    if random.random_i32_inclusive(0, 100) < 50 {
-        let mut extra_level = level;
-        while random.random_i32_inclusive(1, 10) == 10 {
-            extra_level += 1;
-            bullet_card = get_random_action_with_type(
-                seed,
-                x,
-                y,
-                extra_level,
-                ActionType::Projectile,
-                0,
-                save_flags,
-            );
-        }
-        if card_count < 3 {
-            if card_count > 1 && random.random_i32_inclusive(0, 100) < 20 {
-                card = get_random_action_with_type(
-                    seed,
-                    x,
-                    y,
-                    level,
-                    ActionType::Modifier,
-                    2,
-                    save_flags,
-                );
-                gun.spells.push(card);
-                card_count -= 1;
-            }
-            for _ in 0..card_count {
-                gun.spells.push(bullet_card);
-            }
-        } else {
-            if random.random_i32_inclusive(0, 100) < 40 {
-                card = get_random_action_with_type(
-                    seed,
-                    x,
-                    y,
-                    level,
-                    ActionType::DrawMany,
-                    1,
-                    save_flags,
-                );
-                gun.spells.push(card);
-                card_count -= 1;
-            }
-            if card_count > 3 && random.random_i32_inclusive(0, 100) < 40 {
-                card = get_random_action_with_type(
-                    seed,
-                    x,
-                    y,
-                    level,
-                    ActionType::DrawMany,
-                    1,
-                    save_flags,
-                );
-                gun.spells.push(card);
-                card_count -= 1;
-            }
-            if random.random_i32_inclusive(0, 100) < 80 {
-                card = get_random_action_with_type(
-                    seed,
-                    x,
-                    y,
-                    level,
-                    ActionType::Modifier,
-                    2,
-                    save_flags,
-                );
-                gun.spells.push(card);
-                card_count -= 1;
-            }
-            for _ in 0..card_count {
-                gun.spells.push(bullet_card);
-            }
-        }
-    } else {
-        for i in 0..card_count {
-            if random.random_i32_inclusive(0, 100) < good_cards && card_count > 2 {
-                if good_card_count == 0 && multicast == 1 {
-                    card = get_random_action_with_type(
-                        seed,
-                        x,
-                        y,
-                        level,
-                        ActionType::DrawMany,
-                        i + 1,
-                        save_flags,
-                    );
-                    good_card_count += 1;
-                } else if random.random_i32_inclusive(0, 100) < 83 {
-                    card = get_random_action_with_type(
-                        seed,
-                        x,
-                        y,
-                        level,
-                        ActionType::Modifier,
-                        i + 1,
-                        save_flags,
-                    );
-                } else {
-                    card = get_random_action_with_type(
-                        seed,
-                        x,
-                        y,
-                        level,
-                        ActionType::DrawMany,
-                        i + 1,
-                        save_flags,
-                    );
-                }
-                gun.spells.push(card);
-            } else {
-                gun.spells.push(bullet_card);
-                if random_bullets == 1 {
-                    bullet_card = get_random_action_with_type(
-                        seed,
-                        x,
-                        y,
-                        level,
-                        ActionType::Projectile,
-                        i + 1,
-                        save_flags,
-                    );
-                }
-            }
-        }
-    }
-}
-
-pub fn get_wand_unlocked(
-    seed: u32,
-    x: f64,
-    y: f64,
-    cost: i32,
-    level: i32,
-    force_unshuffle: bool,
-    save_flags: Option<&SaveFlags>,
-) -> Wand {
-    let mut random = NollaPrng::new(seed);
-    random.set_random_seed(x, y);
-    let mut wand = get_wand_stats(cost, level, force_unshuffle, &mut random);
-    get_best_sprite(&mut random, &mut wand);
-    wand.spells.clear();
-    add_random_cards(&mut wand, seed, x, y, level, &mut random, save_flags);
-    let capacity = wand.capacity.floor().max(0.0) as usize;
-    wand.spells
-        .resize(capacity.max(wand.spells.len()), Spell::None);
-    wand.into_public()
 }

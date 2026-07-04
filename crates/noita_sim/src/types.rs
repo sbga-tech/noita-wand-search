@@ -5,6 +5,24 @@ use tinyvec::TinyVec;
 pub const WAND_SPELL_INLINE_CAPACITY: usize = 26;
 pub type WandSpells = TinyVec<[Spell; WAND_SPELL_INLINE_CAPACITY]>;
 
+#[derive(Clone, Debug)]
+pub struct SaveFlags {
+    flags: Vec<String>,
+}
+
+impl SaveFlags {
+    pub fn new(flags: Vec<String>) -> Self {
+        Self { flags }
+    }
+
+    pub fn is_spell_unlocked(&self, spell: Spell) -> bool {
+        match spell.unlock_flag() {
+            None => true,
+            Some(flag) => self.flags.iter().any(|candidate| candidate == flag),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum WandStat {
@@ -30,7 +48,6 @@ pub struct Wand {
     pub spread: i32,
     pub shuffle: bool,
     pub always_cast: Spell,
-    pub sprite: usize,
     pub spells: WandSpells,
 }
 
@@ -47,7 +64,6 @@ impl Default for Wand {
             spread: 0,
             shuffle: true,
             always_cast: Spell::None,
-            sprite: 0,
             spells: TinyVec::new(),
         }
     }

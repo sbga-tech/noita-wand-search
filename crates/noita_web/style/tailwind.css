@@ -368,6 +368,25 @@
   .marker circle {
     @apply fill-[rgba(245,183,59,0.22)] stroke-gold-bright stroke-2 [vector-effect:non-scaling-stroke];
   }
+  .marker-parallel line {
+    @apply stroke-spell;
+  }
+  .marker-parallel circle {
+    @apply fill-[rgba(91,176,224,0.24)] stroke-spell;
+  }
+  .marker-world-label {
+    fill: #ffce5c;
+    stroke: #0a0806;
+    stroke-width: 3px;
+    paint-order: stroke;
+    font-family: "Noita Pixel", ui-monospace, "Courier New", monospace;
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    dominant-baseline: middle;
+  }
+  .marker-parallel .marker-world-label {
+    fill: #5bb0e0;
+  }
   .map-progress {
     @apply absolute bottom-2 right-2 grid justify-items-end gap-0.5 border-2 border-bronze bg-[rgba(10,8,6,0.9)] px-3 py-2 text-xs tabular-nums text-gold-bright;
   }

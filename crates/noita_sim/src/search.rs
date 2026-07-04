@@ -2,11 +2,10 @@ use rayon::prelude::*;
 
 use crate::filters::{wand_matches_filters, WandFilterSet};
 use crate::loot::{
-    round_rng_pos, LootSpawner, SpawnCoord, GREAT_CHEST_LOOT_TABLE, TAIKASAUVA_LOOT_TABLE,
-    TINY_DROP_LOOT_TABLE,
+    round_rng_pos, Item, ItemFlags, LootSpawner, SpawnCoord, GREAT_CHEST_LOOT_TABLE,
+    TAIKASAUVA_LOOT_TABLE, TINY_DROP_LOOT_TABLE,
 };
-use crate::types::Wand;
-use crate::wandgen::SaveFlags;
+use crate::types::{SaveFlags, Wand};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum SearchMode {
@@ -262,13 +261,9 @@ impl SearchState {
         }
 
         self.loot_spawner
-            .iter(SpawnCoord { x, y })
+            .iter_with_flags(SpawnCoord { x, y }, ItemFlags::WAND)
             .find_map(|item| match item {
-                crate::loot::Item::Wand(wand)
-                    if wand_matches_filters(&wand, &self.wand_filters) =>
-                {
-                    Some(wand)
-                }
+                Item::Wand(wand) => wand_matches_filters(&wand, &self.wand_filters).then_some(wand),
                 _ => None,
             })
             .map(|wand| SearchHit::Wand {
