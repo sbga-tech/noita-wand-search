@@ -2,39 +2,41 @@ use crate::data::{
     ActionType, Spell, SpellProb, SPELL_PROBS_COUNTS, SPELL_PROBS_TYPES, WAND_SPRITES,
 };
 use crate::rng::NollaPrng;
-use crate::types::Wand;
+use crate::types::{Wand, WandSpells};
 
-#[derive(Clone)]
-struct StatProb {
-    prob: f32,
-    min: f32,
-    max: f32,
-    mean: f32,
-    sharpness: f32,
+type ProbEntry = (f32, ProbDistribution);
+
+#[derive(Clone, Copy)]
+enum ProbDistribution {
+    Int {
+        min: i32,
+        max: i32,
+        mean: i32,
+        sharpness: f32,
+    },
+    Float {
+        min: f32,
+        max: f32,
+        mean: f32,
+        sharpness: f32,
+    },
 }
 
-const EMPTY_STAT_PROB: StatProb = StatProb {
-    prob: 0.0,
-    min: 0.0,
-    max: 0.0,
-    mean: 0.0,
-    sharpness: 0.0,
-};
-#[derive(Clone)]
-struct StatProbBlock {
-    probs: &'static [StatProb],
-    prob_sum: f32,
+#[derive(Clone, Copy)]
+struct ProbTable {
+    total_weight: f32,
+    entries: &'static [ProbEntry],
 }
 
 #[derive(Clone, Copy)]
 enum InternalStat {
-    Reload = 0,
-    CastDelay = 1,
-    Spread = 2,
-    Speed = 3,
-    Capacity = 4,
-    Multicast = 5,
-    Shuffle = 6,
+    Reload,
+    CastDelay,
+    Spread,
+    Speed,
+    Capacity,
+    Multicast,
+    Shuffle,
 }
 
 struct InternalWandInst {
@@ -52,7 +54,7 @@ struct InternalWandInst {
     spread: i32,
     shuffle: bool,
     always_cast: Spell,
-    spells: Vec<Spell>,
+    spells: WandSpells,
 }
 
 impl InternalWandInst {
@@ -72,7 +74,7 @@ impl InternalWandInst {
             spread: 0,
             shuffle: true,
             always_cast: Spell::None,
-            spells: Vec::new(),
+            spells: WandSpells::new(),
         }
     }
 
@@ -94,224 +96,98 @@ impl InternalWandInst {
     }
 }
 
-const STAT_PROBABILITIES: [StatProbBlock; 7] = [
-    StatProbBlock {
-        prob_sum: 1.87,
-        probs: &[
-            StatProb {
-                prob: 1.0,
-                min: 5.0,
-                max: 60.0,
-                mean: 30.0,
-                sharpness: 2.0,
-            },
-            StatProb {
-                prob: 0.5,
-                min: 1.0,
-                max: 100.0,
-                mean: 40.0,
-                sharpness: 2.0,
-            },
-            StatProb {
-                prob: 0.02,
-                min: 1.0,
-                max: 100.0,
-                mean: 40.0,
-                sharpness: 0.0,
-            },
-            StatProb {
-                prob: 0.35,
-                min: 1.0,
-                max: 240.0,
-                mean: 40.0,
-                sharpness: 0.0,
-            },
-        ],
-    },
-    StatProbBlock {
-        prob_sum: 1.65,
-        probs: &[
-            StatProb {
-                prob: 1.0,
-                min: 1.0,
-                max: 30.0,
-                mean: 5.0,
-                sharpness: 2.0,
-            },
-            StatProb {
-                prob: 0.1,
-                min: 1.0,
-                max: 50.0,
-                mean: 15.0,
-                sharpness: 3.0,
-            },
-            StatProb {
-                prob: 0.1,
-                min: -15.0,
-                max: 15.0,
-                mean: 0.0,
-                sharpness: 3.0,
-            },
-            StatProb {
-                prob: 0.45,
-                min: 0.0,
-                max: 35.0,
-                mean: 12.0,
-                sharpness: 0.0,
-            },
-        ],
-    },
-    StatProbBlock {
-        prob_sum: 1.1,
-        probs: &[
-            StatProb {
-                prob: 1.0,
-                min: -5.0,
-                max: 10.0,
-                mean: 0.0,
-                sharpness: 3.0,
-            },
-            StatProb {
-                prob: 0.1,
-                min: -35.0,
-                max: 35.0,
-                mean: 0.0,
-                sharpness: 0.0,
-            },
-        ],
-    },
-    StatProbBlock {
-        prob_sum: 2.101,
-        probs: &[
-            StatProb {
-                prob: 1.0,
-                min: 0.8,
-                max: 1.2,
-                mean: 1.0,
-                sharpness: 6.0,
-            },
-            StatProb {
-                prob: 0.05,
-                min: 1.0,
-                max: 2.0,
-                mean: 1.1,
-                sharpness: 3.0,
-            },
-            StatProb {
-                prob: 0.05,
-                min: 0.5,
-                max: 1.0,
-                mean: 0.9,
-                sharpness: 3.0,
-            },
-            StatProb {
-                prob: 1.0,
-                min: 0.8,
-                max: 1.2,
-                mean: 1.0,
-                sharpness: 0.0,
-            },
-            StatProb {
-                prob: 0.001,
-                min: 1.0,
-                max: 10.0,
-                mean: 5.0,
-                sharpness: 2.0,
-            },
-        ],
-    },
-    StatProbBlock {
-        prob_sum: 2.57,
-        probs: &[
-            StatProb {
-                prob: 1.0,
-                min: 3.0,
-                max: 10.0,
-                mean: 6.0,
-                sharpness: 2.0,
-            },
-            StatProb {
-                prob: 0.1,
-                min: 2.0,
-                max: 7.0,
-                mean: 4.0,
-                sharpness: 4.0,
-            },
-            StatProb {
-                prob: 0.05,
-                min: 1.0,
-                max: 5.0,
-                mean: 3.0,
-                sharpness: 4.0,
-            },
-            StatProb {
-                prob: 0.15,
-                min: 5.0,
-                max: 11.0,
-                mean: 8.0,
-                sharpness: 2.0,
-            },
-            StatProb {
-                prob: 0.12,
-                min: 2.0,
-                max: 20.0,
-                mean: 8.0,
-                sharpness: 4.0,
-            },
-            StatProb {
-                prob: 0.15,
-                min: 3.0,
-                max: 12.0,
-                mean: 6.0,
-                sharpness: 6.0,
-            },
-            StatProb {
-                prob: 1.0,
-                min: 1.0,
-                max: 20.0,
-                mean: 6.0,
-                sharpness: 0.0,
-            },
-        ],
-    },
-    StatProbBlock {
-        prob_sum: 2.25,
-        probs: &[
-            StatProb {
-                prob: 1.0,
-                min: 1.0,
-                max: 3.0,
-                mean: 1.0,
-                sharpness: 3.0,
-            },
-            StatProb {
-                prob: 0.2,
-                min: 2.0,
-                max: 4.0,
-                mean: 2.0,
-                sharpness: 8.0,
-            },
-            StatProb {
-                prob: 0.05,
-                min: 1.0,
-                max: 5.0,
-                mean: 2.0,
-                sharpness: 2.0,
-            },
-            StatProb {
-                prob: 1.0,
-                min: 1.0,
-                max: 5.0,
-                mean: 2.0,
-                sharpness: 0.0,
-            },
-        ],
-    },
-    StatProbBlock {
-        prob_sum: 0.0,
-        probs: &[],
-    },
-];
+macro_rules! prob_table {
+    (int [$(
+        (
+            $weight:expr,
+            {
+                min: $min:expr,
+                max: $max:expr,
+                mean: $mean:expr,
+                sharpness: $sharpness:expr $(,)?
+            }
+        )
+    ),+ $(,)?]) => {
+        ProbTable {
+            total_weight: 0.0 $(+ $weight as f32)+,
+            entries: &[
+                $(($weight as f32, ProbDistribution::Int {
+                    min: $min,
+                    max: $max,
+                    mean: $mean,
+                    sharpness: $sharpness,
+                })),+
+            ],
+        }
+    };
+    (float [$(
+        (
+            $weight:expr,
+            {
+                min: $min:expr,
+                max: $max:expr,
+                mean: $mean:expr,
+                sharpness: $sharpness:expr $(,)?
+            }
+        )
+    ),+ $(,)?]) => {
+        ProbTable {
+            total_weight: 0.0 $(+ $weight as f32)+,
+            entries: &[
+                $(($weight as f32, ProbDistribution::Float {
+                    min: $min,
+                    max: $max,
+                    mean: $mean,
+                    sharpness: $sharpness,
+                })),+
+            ],
+        }
+    };
+}
+
+const RELOAD_PROB: ProbTable = prob_table!(int [
+    (1.0, { min: 5, max: 60, mean: 30, sharpness: 2.0 }),
+    (0.5, { min: 1, max: 100, mean: 40, sharpness: 2.0 }),
+    (0.02, { min: 1, max: 100, mean: 40, sharpness: 0.0 }),
+    (0.35, { min: 1, max: 240, mean: 40, sharpness: 0.0 }),
+]);
+
+const CAST_DELAY_PROB: ProbTable = prob_table!(int [
+    (1.0, { min: 1, max: 30, mean: 5, sharpness: 2.0 }),
+    (0.1, { min: 1, max: 50, mean: 15, sharpness: 3.0 }),
+    (0.1, { min: -15, max: 15, mean: 0, sharpness: 3.0 }),
+    (0.45, { min: 0, max: 35, mean: 12, sharpness: 0.0 }),
+]);
+
+const SPREAD_PROB: ProbTable = prob_table!(int [
+    (1.0, { min: -5, max: 10, mean: 0, sharpness: 3.0 }),
+    (0.1, { min: -35, max: 35, mean: 0, sharpness: 0.0 }),
+]);
+
+const SPEED_PROB: ProbTable = prob_table!(float [
+    (1.0, { min: 0.8, max: 1.2, mean: 1.0, sharpness: 6.0 }),
+    (0.05, { min: 1.0, max: 2.0, mean: 1.1, sharpness: 3.0 }),
+    (0.05, { min: 0.5, max: 1.0, mean: 0.9, sharpness: 3.0 }),
+    (1.0, { min: 0.8, max: 1.2, mean: 1.0, sharpness: 0.0 }),
+    (0.001, { min: 1.0, max: 10.0, mean: 5.0, sharpness: 2.0 }),
+]);
+
+const CAPACITY_PROB: ProbTable = prob_table!(int [
+    (1.0, { min: 3, max: 10, mean: 6, sharpness: 2.0 }),
+    (0.1, { min: 2, max: 7, mean: 4, sharpness: 4.0 }),
+    (0.05, { min: 1, max: 5, mean: 3, sharpness: 4.0 }),
+    (0.15, { min: 5, max: 11, mean: 8, sharpness: 2.0 }),
+    (0.12, { min: 2, max: 20, mean: 8, sharpness: 4.0 }),
+    (0.15, { min: 3, max: 12, mean: 6, sharpness: 6.0 }),
+    (1.0, { min: 1, max: 20, mean: 6, sharpness: 0.0 }),
+]);
+
+const MULTICAST_PROB: ProbTable = prob_table!(int [
+    (1.0, { min: 1, max: 3, mean: 1, sharpness: 3.0 }),
+    (0.2, { min: 2, max: 4, mean: 2, sharpness: 8.0 }),
+    (0.05, { min: 1, max: 5, mean: 2, sharpness: 2.0 }),
+    (1.0, { min: 1, max: 5, mean: 2, sharpness: 0.0 }),
+]);
 
 #[derive(Clone, Debug)]
 pub struct SaveFlags {
@@ -423,23 +299,52 @@ fn get_random_action_with_type(
     )
 }
 
-fn get_gun_prob<'a>(
-    s: InternalStat,
-    dict: &'a [StatProbBlock; 7],
-    random: &mut NollaPrng,
-) -> &'a StatProb {
-    let block = &dict[s as usize];
-    if block.probs.is_empty() {
-        return &EMPTY_STAT_PROB;
-    }
-    let mut rnd = random.next_f32() * block.prob_sum;
-    for prob in block.probs {
-        if rnd < prob.prob {
-            return prob;
+impl ProbTable {
+    fn roll_distribution(&self, random: &mut NollaPrng) -> ProbDistribution {
+        debug_assert!(
+            !self.entries.is_empty(),
+            "probability table must contain at least one entry"
+        );
+        let mut rnd = random.next_f32() * self.total_weight;
+        for (weight, distribution) in self.entries {
+            if rnd < *weight {
+                return *distribution;
+            }
+            rnd -= *weight;
         }
-        rnd -= prob.prob;
+        self.entries
+            .last()
+            .map(|(_, distribution)| *distribution)
+            .expect("probability table must contain at least one entry")
     }
-    &EMPTY_STAT_PROB
+
+    fn roll_i32(&self, random: &mut NollaPrng) -> i32 {
+        match self.roll_distribution(random) {
+            ProbDistribution::Int {
+                min,
+                max,
+                mean,
+                sharpness,
+            } => random.random_distribution_i32(min, max, mean, sharpness),
+            ProbDistribution::Float { .. } => {
+                unreachable!("roll_i32 called on a float probability table")
+            }
+        }
+    }
+
+    fn roll_f32(&self, random: &mut NollaPrng) -> f32 {
+        match self.roll_distribution(random) {
+            ProbDistribution::Int { .. } => {
+                unreachable!("roll_f32 called on an integer probability table")
+            }
+            ProbDistribution::Float {
+                min,
+                max,
+                mean,
+                sharpness,
+            } => random.random_distribution_f32(min, max, mean, sharpness),
+        }
+    }
 }
 
 fn shuffle_table(table: &mut [InternalStat], random: &mut NollaPrng) {
@@ -449,43 +354,25 @@ fn shuffle_table(table: &mut [InternalStat], random: &mut NollaPrng) {
     }
 }
 
-fn apply_reload(gun: &mut InternalWandInst, prob: &StatProb, random: &mut NollaPrng) {
+fn apply_reload(gun: &mut InternalWandInst, rolled: i32) {
     let min = (60.0 - gun.cost * 5.0).clamp(1.0, 240.0);
-    gun.reload = (random.random_distribution_i32(
-        prob.min as i32,
-        prob.max as i32,
-        prob.mean as i32,
-        prob.sharpness,
-    ) as f32)
-        .clamp(min, 1024.0) as i32;
+    gun.reload = (rolled as f32).clamp(min, 1024.0) as i32;
     gun.cost -= (60 - gun.reload) as f32 / 5.0;
 }
-fn apply_delay(gun: &mut InternalWandInst, prob: &StatProb, random: &mut NollaPrng) {
+fn apply_delay(gun: &mut InternalWandInst, rolled: i32) {
     let min = (16.0 - gun.cost).clamp(-50.0, 50.0);
-    gun.delay = (random.random_distribution_i32(
-        prob.min as i32,
-        prob.max as i32,
-        prob.mean as i32,
-        prob.sharpness,
-    ) as f32)
-        .clamp(min, 50.0) as i32;
+    gun.delay = (rolled as f32).clamp(min, 50.0) as i32;
     gun.cost -= (16 - gun.delay) as f32;
 }
-fn apply_spread(gun: &mut InternalWandInst, prob: &StatProb, random: &mut NollaPrng) {
+fn apply_spread(gun: &mut InternalWandInst, rolled: i32) {
     let min = (gun.cost / -1.5).clamp(-35.0, 35.0);
-    gun.spread = (random.random_distribution_i32(
-        prob.min as i32,
-        prob.max as i32,
-        prob.mean as i32,
-        prob.sharpness,
-    ) as f32)
-        .clamp(min, 35.0) as i32;
+    gun.spread = (rolled as f32).clamp(min, 35.0) as i32;
     gun.cost -= (16 - gun.spread) as f32;
 }
-fn apply_speed(gun: &mut InternalWandInst, prob: &StatProb, random: &mut NollaPrng) {
-    gun.speed = random.random_distribution_f32(prob.min, prob.max, prob.mean, prob.sharpness);
+fn apply_speed(gun: &mut InternalWandInst, rolled: f32) {
+    gun.speed = rolled;
 }
-fn apply_capacity(gun: &mut InternalWandInst, prob: &StatProb, random: &mut NollaPrng) {
+fn apply_capacity(gun: &mut InternalWandInst, rolled: i32) {
     let mut max = (gun.cost / 5.0 + 6.0).clamp(1.0, 20.0);
     if gun.force_unshuffle {
         max = (gun.cost - 15.0) / 5.0;
@@ -494,16 +381,10 @@ fn apply_capacity(gun: &mut InternalWandInst, prob: &StatProb, random: &mut Noll
         }
     }
     max = max.clamp(1.0, 20.0);
-    gun.capacity = (random.random_distribution_i32(
-        prob.min as i32,
-        prob.max as i32,
-        prob.mean as i32,
-        prob.sharpness,
-    ) as f32)
-        .clamp(1.0, max);
+    gun.capacity = (rolled as f32).clamp(1.0, max);
     gun.cost -= (gun.capacity - 6.0) * 5.0;
 }
-fn apply_multicast(gun: &mut InternalWandInst, prob: &StatProb, random: &mut NollaPrng) {
+fn apply_multicast(gun: &mut InternalWandInst, rolled: i32) {
     let action_costs = [
         0.0,
         5.0 + gun.capacity * 2.0,
@@ -518,18 +399,11 @@ fn apply_multicast(gun: &mut InternalWandInst, prob: &StatProb, random: &mut Nol
         }
     }
     max = max.clamp(1.0, gun.capacity);
-    gun.multicast = (random.random_distribution_i32(
-        prob.min as i32,
-        prob.max as i32,
-        prob.mean as i32,
-        prob.sharpness,
-    ) as f32)
-        .clamp(1.0, max)
-        .floor() as i32;
+    gun.multicast = (rolled as f32).clamp(1.0, max).floor() as i32;
     let idx = gun.multicast.clamp(1, 5) as usize - 1;
     gun.cost -= action_costs[idx];
 }
-fn apply_shuffle(gun: &mut InternalWandInst, _prob: &StatProb, random: &mut NollaPrng) {
+fn apply_shuffle(gun: &mut InternalWandInst, random: &mut NollaPrng) {
     let mut rnd = random.random_i32_inclusive(0, 1);
     if gun.force_unshuffle {
         rnd = 1;
@@ -539,21 +413,15 @@ fn apply_shuffle(gun: &mut InternalWandInst, _prob: &StatProb, random: &mut Noll
         gun.cost -= 15.0 + gun.capacity * 5.0;
     }
 }
-fn apply_random_variable(
-    gun: &mut InternalWandInst,
-    s: InternalStat,
-    dict: &[StatProbBlock; 7],
-    random: &mut NollaPrng,
-) {
-    let p = get_gun_prob(s, dict, random);
+fn apply_random_variable(gun: &mut InternalWandInst, s: InternalStat, random: &mut NollaPrng) {
     match s {
-        InternalStat::Reload => apply_reload(gun, p, random),
-        InternalStat::CastDelay => apply_delay(gun, p, random),
-        InternalStat::Spread => apply_spread(gun, p, random),
-        InternalStat::Speed => apply_speed(gun, p, random),
-        InternalStat::Capacity => apply_capacity(gun, p, random),
-        InternalStat::Multicast => apply_multicast(gun, p, random),
-        InternalStat::Shuffle => apply_shuffle(gun, p, random),
+        InternalStat::Reload => apply_reload(gun, RELOAD_PROB.roll_i32(random)),
+        InternalStat::CastDelay => apply_delay(gun, CAST_DELAY_PROB.roll_i32(random)),
+        InternalStat::Spread => apply_spread(gun, SPREAD_PROB.roll_i32(random)),
+        InternalStat::Speed => apply_speed(gun, SPEED_PROB.roll_f32(random)),
+        InternalStat::Capacity => apply_capacity(gun, CAPACITY_PROB.roll_i32(random)),
+        InternalStat::Multicast => apply_multicast(gun, MULTICAST_PROB.roll_i32(random)),
+        InternalStat::Shuffle => apply_shuffle(gun, random),
     }
 }
 
@@ -603,22 +471,18 @@ fn get_wand_stats(
         InternalStat::Spread,
         InternalStat::Speed,
     ];
-    let mut variables_03 = [InternalStat::Shuffle, InternalStat::Multicast];
     shuffle_table(&mut variables_01, random);
-    if !gun.force_unshuffle {
-        shuffle_table(&mut variables_03, random);
-    }
+    let multicast_first = !gun.force_unshuffle && random.random_i32_inclusive(0, 1) == 0;
     for s in variables_01 {
-        apply_random_variable(&mut gun, s, &STAT_PROBABILITIES, random);
+        apply_random_variable(&mut gun, s, random);
     }
-    apply_random_variable(
-        &mut gun,
-        InternalStat::Capacity,
-        &STAT_PROBABILITIES,
-        random,
-    );
-    for s in variables_03 {
-        apply_random_variable(&mut gun, s, &STAT_PROBABILITIES, random);
+    apply_random_variable(&mut gun, InternalStat::Capacity, random);
+    if multicast_first {
+        apply_random_variable(&mut gun, InternalStat::Multicast, random);
+        apply_random_variable(&mut gun, InternalStat::Shuffle, random);
+    } else {
+        apply_random_variable(&mut gun, InternalStat::Shuffle, random);
+        apply_random_variable(&mut gun, InternalStat::Multicast, random);
     }
     if gun.cost > 5.0 && random.random_i32_inclusive(0, 1000) < 995 {
         if gun.shuffle {

@@ -4,6 +4,8 @@ use crate::rng::NollaPrng;
 use crate::types::Wand;
 use crate::wandgen::{get_wand_unlocked, SaveFlags};
 
+use tinyvec::{tiny_vec, TinyVec};
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct WandSpawner {
     pub cost: i32,
@@ -87,6 +89,24 @@ pub struct LootTable {
     min_roll: i32,
     max_roll: i32,
     entries: &'static [LootEntry],
+}
+
+const EMPTY_LOOT_TABLE: LootTable = LootTable {
+    min_roll: 0,
+    max_roll: 0,
+    entries: &[],
+};
+
+impl Default for LootTable {
+    fn default() -> Self {
+        EMPTY_LOOT_TABLE
+    }
+}
+
+impl Default for &'static LootTable {
+    fn default() -> Self {
+        &EMPTY_LOOT_TABLE
+    }
 }
 
 impl LootTable {
@@ -409,12 +429,46 @@ pub struct LootSpawner {
     save_flags: Option<SaveFlags>,
 }
 
+const INLINE_PENDING_TABLES: usize = 8;
+
+fn push_pending_table(
+    pending_tables: &mut TinyVec<[(&'static LootTable, u32); INLINE_PENDING_TABLES]>,
+    table: &'static LootTable,
+    count: u32,
+) {
+    if count != 0 {
+        pending_tables.push((table, count));
+    }
+}
+
+fn pop_pending_table(
+    pending_tables: &mut TinyVec<[(&'static LootTable, u32); INLINE_PENDING_TABLES]>,
+) -> Option<&'static LootTable> {
+    let (table, count) = pending_tables.last_mut()?;
+    let table = *table;
+    *count -= 1;
+    if *count == 0 {
+        pending_tables.pop();
+    }
+    Some(table)
+}
+
+fn loot_random(world_seed: u32, table: &'static LootTable, coord: SpawnCoord) -> NollaPrng {
+    let mut random = NollaPrng::new(world_seed);
+    if core::ptr::addr_eq(table, &GREAT_CHEST_LOOT_TABLE) {
+        random.set_random_seed_int(round_rng_pos(coord.x), coord.y);
+    } else {
+        random.set_random_seed(coord.x as f64, coord.y as f64);
+    }
+    random
+}
+
 pub struct LootIter<'a> {
     world_seed: u32,
     coord: SpawnCoord,
     save_flags: Option<&'a SaveFlags>,
     random: NollaPrng,
-    pending_tables: Vec<&'static LootTable>,
+    pending_tables: TinyVec<[(&'static LootTable, u32); INLINE_PENDING_TABLES]>,
     pending_potions: Option<core::slice::Iter<'static, PotionKind>>,
 }
 
@@ -425,19 +479,14 @@ impl<'a> LootIter<'a> {
         save_flags: Option<&'a SaveFlags>,
         coord: SpawnCoord,
     ) -> Self {
-        let mut random = NollaPrng::new(world_seed);
-        if core::ptr::addr_eq(table, &GREAT_CHEST_LOOT_TABLE) {
-            random.set_random_seed_int(round_rng_pos(coord.x), coord.y);
-        } else {
-            random.set_random_seed(coord.x as f64, coord.y as f64);
-        }
+        let random = loot_random(world_seed, table, coord);
 
         Self {
             world_seed,
             coord,
             save_flags,
             random,
-            pending_tables: vec![table],
+            pending_tables: tiny_vec!([(&'static LootTable, u32); INLINE_PENDING_TABLES] => (table, 1)),
             pending_potions: None,
         }
     }
@@ -460,7 +509,7 @@ impl Iterator for LootIter<'_> {
                 self.pending_potions = None;
             }
 
-            let table = self.pending_tables.pop()?;
+            let table = pop_pending_table(&mut self.pending_tables)?;
             match table.roll(&mut self.random) {
                 LootNode::Spawner(ItemSpawner::Wand(spawner)) => {
                     return Some(Item::Wand(spawner.spawn_wand(
@@ -473,11 +522,9 @@ impl Iterator for LootIter<'_> {
                     self.pending_potions = Some(kinds.iter());
                 }
                 LootNode::ItemPlaceholder(name) => return Some(Item::Placeholder(name)),
-                LootNode::Table(nested) => self.pending_tables.push(nested),
+                LootNode::Table(nested) => push_pending_table(&mut self.pending_tables, nested, 1),
                 LootNode::Reroll(times) => {
-                    for _ in 0..*times {
-                        self.pending_tables.push(table);
-                    }
+                    push_pending_table(&mut self.pending_tables, table, *times)
                 }
             }
         }

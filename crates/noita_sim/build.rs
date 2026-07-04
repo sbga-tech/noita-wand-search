@@ -824,6 +824,13 @@ fn generated_spells(actions: &[Action], locales: &[String]) -> String {
         .iter()
         .map(|action| format_ident!("{}", action.variant))
         .collect::<Vec<_>>();
+    assert_eq!(
+        actions.first().map(|action| action.variant.as_str()),
+        Some("None"),
+        "first generated spell must be None so Spell::default() is stable"
+    );
+    let default_variant = variants[0].clone();
+    let non_default_variants = variants.iter().skip(1).collect::<Vec<_>>();
     let ids = actions
         .iter()
         .map(|action| Literal::string(&action.id))
@@ -916,12 +923,15 @@ fn generated_spells(actions: &[Action], locales: &[String]) -> String {
             Hash,
             serde::Serialize,
             serde::Deserialize,
+            Default,
             num_enum::IntoPrimitive,
             num_enum::TryFromPrimitive,
         )]
         #[repr(u16)]
         pub enum Spell {
-            #(#variants,)*
+            #[default]
+            #default_variant,
+            #(#non_default_variants,)*
         }
 
         impl Spell {

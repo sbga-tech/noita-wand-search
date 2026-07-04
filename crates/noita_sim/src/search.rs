@@ -66,11 +66,10 @@ struct SpiralCandidate {
     x: i32,
     y: i32,
     searched_pixels: u32,
-    state: SpiralState,
 }
 
-#[derive(Clone, Copy, Debug)]
-struct SpiralState {
+struct SpiralCursor {
+    searched_pixels: u32,
     last_x: f64,
     last_y: f64,
     x_off: f64,
@@ -162,17 +161,25 @@ impl SearchState {
         let mut candidates = std::mem::take(&mut self.candidates);
         candidates.clear();
         candidates.reserve(max_iterations as usize);
+        let batch_start = self.spiral_cursor();
         for _ in 0..max_iterations {
             candidates.push(self.next_candidate());
             self.advance_spiral();
         }
 
-        let hit = candidates.par_iter().find_map_first(|candidate| {
-            self.check_candidate(candidate.x, candidate.y, candidate.searched_pixels)
-                .map(|hit| (*candidate, hit))
-        });
-        if let Some((candidate, hit)) = hit {
-            self.restore_candidate(candidate);
+        let hit =
+            candidates
+                .par_iter()
+                .enumerate()
+                .find_map_first(|(candidate_index, candidate)| {
+                    self.check_candidate(candidate.x, candidate.y, candidate.searched_pixels)
+                        .map(|hit| (candidate_index, *candidate, hit))
+                });
+        if let Some((candidate_index, candidate, hit)) = hit {
+            let restored = self.restore_batch_candidate(batch_start, candidate_index);
+            debug_assert_eq!(restored.x, candidate.x);
+            debug_assert_eq!(restored.y, candidate.y);
+            debug_assert_eq!(restored.searched_pixels, candidate.searched_pixels);
             self.candidates = candidates;
             return Some(hit);
         }
@@ -194,25 +201,42 @@ impl SearchState {
             x: x_seed as i32,
             y: y_seed as i32,
             searched_pixels: self.searched_pixels,
-            state: SpiralState {
-                last_x: self.last_x,
-                last_y: self.last_y,
-                x_off: self.x_off,
-                y_off: self.y_off,
-                x_step: self.x_step,
-                y_step: self.y_step,
-            },
         }
     }
 
-    fn restore_candidate(&mut self, candidate: SpiralCandidate) {
-        self.searched_pixels = candidate.searched_pixels;
-        self.last_x = candidate.state.last_x;
-        self.last_y = candidate.state.last_y;
-        self.x_off = candidate.state.x_off;
-        self.y_off = candidate.state.y_off;
-        self.x_step = candidate.state.x_step;
-        self.y_step = candidate.state.y_step;
+    fn spiral_cursor(&self) -> SpiralCursor {
+        SpiralCursor {
+            searched_pixels: self.searched_pixels,
+            last_x: self.last_x,
+            last_y: self.last_y,
+            x_off: self.x_off,
+            y_off: self.y_off,
+            x_step: self.x_step,
+            y_step: self.y_step,
+        }
+    }
+
+    fn restore_cursor(&mut self, cursor: SpiralCursor) {
+        self.searched_pixels = cursor.searched_pixels;
+        self.last_x = cursor.last_x;
+        self.last_y = cursor.last_y;
+        self.x_off = cursor.x_off;
+        self.y_off = cursor.y_off;
+        self.x_step = cursor.x_step;
+        self.y_step = cursor.y_step;
+    }
+
+    fn restore_batch_candidate(
+        &mut self,
+        batch_start: SpiralCursor,
+        candidate_index: usize,
+    ) -> SpiralCandidate {
+        self.restore_cursor(batch_start);
+        for _ in 0..candidate_index {
+            self.next_candidate();
+            self.advance_spiral();
+        }
+        self.next_candidate()
     }
 
     fn advance_spiral(&mut self) {

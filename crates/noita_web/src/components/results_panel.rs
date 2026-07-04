@@ -214,7 +214,9 @@ mod tests {
             shuffle: false,
             always_cast: Spell::Homing,
             sprite: 821,
-            spells: vec![Spell::ManaReduce, Spell::CircleshotA],
+            spells: [Spell::ManaReduce, Spell::CircleshotA]
+                .into_iter()
+                .collect(),
         }
     }
 

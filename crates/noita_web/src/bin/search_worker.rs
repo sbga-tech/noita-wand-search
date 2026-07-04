@@ -6,7 +6,10 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::{spawn_local, JsFuture};
 use web_sys::{DedicatedWorkerGlobalScope, MessageEvent};
 
-const SEARCH_BATCH_CANDIDATES: u32 = 1 << 18;
+const SEARCH_PROGRESS_CANDIDATES: u32 = 1 << 18;
+const SEARCH_CANDIDATES_PER_THREAD: u32 = 8_192;
+const MIN_SEARCH_BATCH_CANDIDATES: u32 = 1 << 14;
+const MAX_SEARCH_BATCH_CANDIDATES: u32 = 1 << 16;
 
 fn hardware_concurrency() -> usize {
     let global = js_sys::global();
@@ -19,6 +22,11 @@ fn hardware_concurrency() -> usize {
         .unwrap_or(1.0);
 
     concurrency.max(1.0) as usize
+}
+
+fn search_batch_candidates(thread_count: usize) -> u32 {
+    (thread_count as u32 * SEARCH_CANDIDATES_PER_THREAD)
+        .clamp(MIN_SEARCH_BATCH_CANDIDATES, MAX_SEARCH_BATCH_CANDIDATES)
 }
 
 fn pixels_per_second(searched_pixels: u32, started_at_ms: f64, now_ms: f64) -> f64 {
@@ -45,10 +53,11 @@ fn post_event(scope: &DedicatedWorkerGlobalScope, event: SearchWorkerEvent) {
     }
 }
 
-fn run_search(scope: &DedicatedWorkerGlobalScope, start: SearchWorkerStart) {
-    let worker_batch_size = SEARCH_BATCH_CANDIDATES;
+fn run_search(scope: &DedicatedWorkerGlobalScope, start: SearchWorkerStart, thread_count: usize) {
+    let worker_batch_size = search_batch_candidates(thread_count);
     let mut state = SearchState::new(start.request);
     let started_at_ms = js_sys::Date::now();
+    let mut searched_since_progress = 0;
 
     loop {
         if let Some(hit) = state.step(worker_batch_size) {
@@ -68,28 +77,33 @@ fn run_search(scope: &DedicatedWorkerGlobalScope, start: SearchWorkerStart) {
             return;
         }
 
-        let now_ms = js_sys::Date::now();
-        let progress = state.progress();
-        let pixels_per_second = pixels_per_second(progress.searched_pixels, started_at_ms, now_ms);
-        post_event(
-            scope,
-            SearchWorkerEvent::Progress {
-                token_id: start.token_id,
-                progress,
-                pixels_per_second,
-            },
-        );
+        searched_since_progress += worker_batch_size;
+        if searched_since_progress >= SEARCH_PROGRESS_CANDIDATES {
+            let now_ms = js_sys::Date::now();
+            let progress = state.progress();
+            let pixels_per_second =
+                pixels_per_second(progress.searched_pixels, started_at_ms, now_ms);
+            post_event(
+                scope,
+                SearchWorkerEvent::Progress {
+                    token_id: start.token_id,
+                    progress,
+                    pixels_per_second,
+                },
+            );
+            searched_since_progress = 0;
+        }
     }
 }
 
-fn install_message_handler(scope: DedicatedWorkerGlobalScope) {
+fn install_message_handler(scope: DedicatedWorkerGlobalScope, thread_count: usize) {
     let handler_scope = scope.clone();
     let on_message =
         Closure::<dyn FnMut(MessageEvent)>::wrap(Box::new(move |event: MessageEvent| {
             let message = Uint8Array::new(&event.data()).to_vec();
 
             match bincode::deserialize::<SearchWorkerStart>(&message) {
-                Ok(start) => run_search(&handler_scope, start),
+                Ok(start) => run_search(&handler_scope, start, thread_count),
                 Err(error) => post_event(
                     &handler_scope,
                     SearchWorkerEvent::Error {
@@ -112,7 +126,7 @@ pub fn start() {
     spawn_local(async move {
         let thread_count = hardware_concurrency();
         match JsFuture::from(wasm_bindgen_rayon::init_thread_pool(thread_count)).await {
-            Ok(_) => install_message_handler(scope),
+            Ok(_) => install_message_handler(scope, thread_count),
             Err(error) => post_event(
                 &scope,
                 SearchWorkerEvent::Error {

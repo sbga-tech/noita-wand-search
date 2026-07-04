@@ -1,5 +1,9 @@
 use crate::data::Spell;
 use serde::{Deserialize, Serialize};
+use tinyvec::TinyVec;
+
+pub const WAND_SPELL_INLINE_CAPACITY: usize = 26;
+pub type WandSpells = TinyVec<[Spell; WAND_SPELL_INLINE_CAPACITY]>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[repr(u8)]
@@ -27,7 +31,7 @@ pub struct Wand {
     pub shuffle: bool,
     pub always_cast: Spell,
     pub sprite: usize,
-    pub spells: Vec<Spell>,
+    pub spells: WandSpells,
 }
 
 impl Default for Wand {
@@ -44,7 +48,7 @@ impl Default for Wand {
             shuffle: true,
             always_cast: Spell::None,
             sprite: 0,
-            spells: Vec::new(),
+            spells: TinyVec::new(),
         }
     }
 }

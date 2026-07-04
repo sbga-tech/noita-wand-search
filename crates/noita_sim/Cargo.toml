@@ -8,6 +8,7 @@ license.workspace = true
 serde.workspace = true
 num_enum = "0.7"
 rayon = "1.10"
+tinyvec = { version = "1.11.0", features = ["alloc", "serde"] }
 
 [build-dependencies]
 csv = "1"

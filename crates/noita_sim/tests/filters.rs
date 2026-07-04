@@ -19,7 +19,9 @@ fn sample_wand() -> Wand {
         regen: 120,
         shuffle: false,
         always_cast: add_mana(),
-        spells: vec![Spell::Bomb, Spell::LightBullet, Spell::Bomb],
+        spells: [Spell::Bomb, Spell::LightBullet, Spell::Bomb]
+            .into_iter()
+            .collect(),
         ..Wand::default()
     }
 }
