@@ -128,10 +128,11 @@ pub(in crate::wand) fn add_random_cards(
     let mut random_bullets = 0;
     let mut good_card_count = 0;
     let good_cards = random.random_i32_inclusive(5, 45);
+    let min_card_count = (0.51 * capacity).ceil() as i32;
+    let max_card_count = capacity.floor() as i32;
     let mut card_count = random
-        .random_f32(0.51 * capacity, capacity)
-        .floor()
-        .clamp(1.0, (capacity - 1.0).floor()) as i32;
+        .random_i32_inclusive(min_card_count, max_card_count)
+        .clamp(1, (capacity - 1.0).floor() as i32);
     if random.random_i32_inclusive(0, 100) < orig_level * 10 - 5 {
         random_bullets = 1;
     }

@@ -208,7 +208,7 @@ mod tests {
         for seed in 0..512 {
             let mut random = NollaPrng::new(seed);
             random.set_random_seed(seed as f64 * 0.5, seed as f64 * -0.25);
-            let wand = get_wand_stats(100, 5, false, &mut random);
+            let wand = get_wand_stats(100, 5, false, false, &mut random);
             let mut linear_random = random.clone();
             let mut lookup_random = random;
 

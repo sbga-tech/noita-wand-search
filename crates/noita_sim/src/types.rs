@@ -15,10 +15,14 @@ impl SaveFlags {
         Self { flags }
     }
 
+    pub fn has_flag(&self, flag: &str) -> bool {
+        self.flags.iter().any(|candidate| candidate == flag)
+    }
+
     pub fn is_spell_unlocked(&self, spell: Spell) -> bool {
         match spell.unlock_flag() {
             None => true,
-            Some(flag) => self.flags.iter().any(|candidate| candidate == flag),
+            Some(flag) => self.has_flag(flag),
         }
     }
 }

@@ -39,7 +39,14 @@ pub fn profile_get_wand_unlocked(
     profile.setup += phase_start.elapsed();
 
     let phase_start = std::time::Instant::now();
-    let mut wand = get_wand_stats(cost, level, force_unshuffle, &mut random);
+    let no_more_shuffle_wands = save_flags.is_some_and(|flags| flags.no_more_shuffle_wands());
+    let mut wand = get_wand_stats(
+        cost,
+        level,
+        force_unshuffle,
+        no_more_shuffle_wands,
+        &mut random,
+    );
     profile.stats += phase_start.elapsed();
 
     let phase_start = std::time::Instant::now();

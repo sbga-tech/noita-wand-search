@@ -206,8 +206,8 @@ fn mode_stat_range(mode: SearchMode, stat: WandStat) -> NumericRange {
 fn max_capacity(mode: SearchMode) -> i32 {
     match mode {
         SearchMode::TaikasauvaWand => 49,
-        SearchMode::TinyDropWand => 35,
-        SearchMode::EoeWand => 61,
+        SearchMode::TinyDropWand => 73,
+        SearchMode::EoeWand => 77,
     }
 }
 
@@ -522,7 +522,7 @@ mod tests {
         let request = request_with_filter(WandFilter::stat(
             WandStat::Capacity,
             Comparison::GreaterThan,
-            61.0,
+            77.0,
         ));
         assert!(matches!(
             validate_search_request(&request),
@@ -564,7 +564,7 @@ mod tests {
         let request =
             request_with_filter(WandFilter::include(WandFilterKind::SpellDeckRequirement {
                 value: Spell::Nolla,
-                amount: 62,
+                amount: 78,
             }));
         assert!(matches!(
             validate_search_request(&request),

@@ -1,5 +1,7 @@
-use crate::components::controls::{Combobox, Dropdown, SelectOption};
-use crate::components::unlock_settings::{all_unlock_flags, UnlockSettings};
+use crate::components::ui::{Combobox, Dropdown, SelectOption};
+use crate::components::unlock_settings::{
+    all_unlock_flags, normalize_unlock_flags as normalize_known_flags, UnlockSettings,
+};
 use leptos::prelude::*;
 use noita_sim::filters::{Comparison, FilterMode, WandFilter, WandFilterKind, WandFilterSet};
 use noita_sim::search::{SearchMode, SearchRequest};
@@ -205,11 +207,7 @@ pub fn default_form_state() -> FormState {
 }
 
 fn normalize_unlock_flags(flags: Vec<String>) -> Vec<String> {
-    let selected = flags.into_iter().collect::<std::collections::BTreeSet<_>>();
-    all_unlock_flags()
-        .into_iter()
-        .filter(|flag| selected.contains(flag))
-        .collect()
+    normalize_known_flags(flags)
 }
 
 fn normalize_form_state(mut state: FormState) -> FormState {
@@ -796,11 +794,11 @@ mod tests {
             attribute: PredicateAttribute::Capacity,
             comparison: Comparison::GreaterThan,
             amount: "1".into(),
-            value: PredicateValue::Number("61".into()),
+            value: PredicateValue::Number("77".into()),
             excluded: false,
         }];
 
-        let error = validate_state(&state).expect_err("capacity > 61 should not search");
+        let error = validate_state(&state).expect_err("capacity > 77 should not search");
         assert!(error.contains("capacity filter is outside the possible range"));
     }
 

@@ -192,6 +192,7 @@ mod tests {
         apply_mode_side_effects, default_form_state, validate_state, PredicateAttribute,
         PredicateInput, PredicateValue,
     };
+    use crate::components::unlock_settings::all_unlock_flags;
     use noita_sim::filters::{Comparison, WandFilterKind};
     use noita_sim::search::SearchMode;
     use noita_sim::WandStat;
@@ -233,13 +234,19 @@ mod tests {
             other => panic!("expected stat filter, got {other:?}"),
         }
         let unlock_flags = request.unlock_flags.as_ref().unwrap();
+        assert_eq!(unlock_flags, &all_unlock_flags());
         assert!(unlock_flags
             .iter()
             .any(|flag| flag == "card_unlocked_pyramid"));
         assert!(unlock_flags
             .iter()
             .any(|flag| flag == "card_unlocked_exploding_deer"));
-        assert_eq!(unlock_flags.len(), 38);
+        assert!(unlock_flags
+            .iter()
+            .any(|flag| flag == "card_unlocked_funky"));
+        assert!(!unlock_flags
+            .iter()
+            .any(|flag| flag == "card_unlocked_infinite"));
     }
 
     #[test]

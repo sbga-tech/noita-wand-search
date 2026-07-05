@@ -243,7 +243,7 @@
     @apply w-full;
   }
 
-  /* ---- unlock flags ------------------------------------------------------ */
+  /* ---- save flags -------------------------------------------------------- */
   .unlock-menu {
     @apply block;
   }
@@ -290,14 +290,26 @@
   .unlock-status {
     @apply m-0 text-xs text-parchment-dim;
   }
+  .unlock-section {
+    @apply grid gap-2;
+  }
+  .unlock-section + .unlock-section {
+    @apply mt-2 border-t-2 border-bronze pt-4;
+  }
+  .unlock-section-heading {
+    @apply m-0 font-display text-[0.76rem] uppercase tracking-widest text-gold-bright;
+  }
   .unlock-actions {
     @apply grid grid-cols-2 gap-2;
   }
   .unlock-flag-list {
-    @apply grid max-h-[28rem] gap-2 overflow-auto pr-1;
+    @apply grid max-h-[24rem] gap-2 overflow-auto pr-1;
+  }
+  .unlock-perk-list {
+    @apply max-h-none overflow-visible pr-0;
   }
   .unlock-flag-row {
-    @apply grid grid-cols-[auto_minmax(0,1fr)] cursor-pointer items-start gap-2 border-2 border-bronze bg-night p-2;
+    @apply grid grid-cols-[auto_minmax(0,1fr)] cursor-pointer items-start gap-3 border-2 border-bronze bg-night p-2;
   }
   .unlock-flag-row:has(input:checked) {
     @apply border-gold bg-[rgba(245,183,59,0.1)];
@@ -306,13 +318,22 @@
     @apply mt-1 h-4 w-4 accent-gold;
   }
   .unlock-flag-copy {
-    @apply grid min-w-0 gap-1;
+    @apply grid min-w-0 gap-2;
   }
   .unlock-flag-copy b {
     @apply break-all text-xs font-normal text-gold;
   }
   .unlock-flag-copy small {
     @apply text-xs leading-snug text-parchment-dim;
+  }
+  .unlock-spell-icons {
+    @apply flex flex-wrap gap-1;
+  }
+  .unlock-perk-row {
+    @apply items-center;
+  }
+  .unlock-perk-row input {
+    @apply mt-0;
   }
 
   /* ---- results -------------------------------------------------------- */

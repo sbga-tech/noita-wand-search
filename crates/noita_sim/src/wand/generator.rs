@@ -49,7 +49,13 @@ impl WandGenerator {
         )
     }
 
-    pub(crate) fn wand_sprite(&self, world_seed: u32, x: i32, y: i32) -> usize {
+    pub(crate) fn wand_sprite(
+        &self,
+        world_seed: u32,
+        x: i32,
+        y: i32,
+        save_flags: Option<&SaveFlags>,
+    ) -> usize {
         get_wand_sprite(
             world_seed,
             x as f64 + self.x_offset,
@@ -57,6 +63,7 @@ impl WandGenerator {
             self.cost,
             self.level,
             self.forced_nonshuffle,
+            save_flags,
         )
     }
 }

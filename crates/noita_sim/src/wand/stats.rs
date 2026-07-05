@@ -314,6 +314,7 @@ pub(in crate::wand) fn get_wand_stats(
     cost: i32,
     level: i32,
     force_unshuffle: bool,
+    no_more_shuffle_wands: bool,
     random: &mut NollaPrng,
 ) -> InternalWandInst {
     let mut gun = InternalWandInst::new();
@@ -328,7 +329,7 @@ pub(in crate::wand) fn get_wand_stats(
     let mut p = random.random_i32_inclusive(0, 100);
     if p < 20 {
         gun.regen = (50 * level + random.random_i32_inclusive(-5, 5 * level)) / 5;
-        gun.mana = (50 + 150 * level + random.random_i32_inclusive(5, 5) * 10) * 3;
+        gun.mana = (50 + 150 * level + random.random_i32_inclusive(-5, 5) * 10) * 3;
     }
     p = random.random_i32_inclusive(0, 100);
     if p < 15 {
@@ -377,7 +378,7 @@ pub(in crate::wand) fn get_wand_stats(
         }
         gun.cost = 0.0;
     }
-    if force_unshuffle {
+    if force_unshuffle || no_more_shuffle_wands {
         gun.shuffle = false;
     }
     if random.random_i32_inclusive(0, 10000) <= 9999 {

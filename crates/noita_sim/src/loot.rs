@@ -286,7 +286,7 @@ const GREAT_CHEST_WAND_TABLE: LootTable = loot_table!({
         },
         {
             threshold: 100,
-            node: LootNode::Spawner(ItemGenerator::Wand(WandGenerator::new(180, 11, true))),
+            node: LootNode::Spawner(ItemGenerator::Wand(WandGenerator::new(200, 11, false))),
         },
     ]
 });
@@ -604,7 +604,7 @@ pub fn find_wand_sprite(
             LootNode::Spawner(ItemGenerator::Wand(generator)) => {
                 let wand = generator.spawn_wand(world_seed, coord.x, coord.y, save_flags);
                 if &wand == target {
-                    return Some(generator.wand_sprite(world_seed, coord.x, coord.y));
+                    return Some(generator.wand_sprite(world_seed, coord.x, coord.y, save_flags));
                 }
             }
             LootNode::Spawner(ItemGenerator::Potions(_)) | LootNode::ItemPlaceholder(_) => {}
